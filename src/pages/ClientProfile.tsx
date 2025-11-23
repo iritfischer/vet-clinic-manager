@@ -185,13 +185,23 @@ const ClientProfile = () => {
 
       // Save price items if any
       if (price_items && price_items.length > 0) {
-        const priceItemsToInsert = price_items.map((item: any) => ({
-          visit_id: visit.id,
-          price_item_id: item.item_id,
-          quantity: item.quantity,
-          clinic_id: clinicId,
-          price_at_time: 0,
-        }));
+        // Fetch current prices for all items
+        const itemIds = price_items.map((item: any) => item.item_id);
+        const { data: priceItemsData } = await supabase
+          .from('price_items')
+          .select('id, price_with_vat')
+          .in('id', itemIds);
+
+        const priceItemsToInsert = price_items.map((item: any) => {
+          const priceItem = priceItemsData?.find(p => p.id === item.item_id);
+          return {
+            visit_id: visit.id,
+            price_item_id: item.item_id,
+            quantity: item.quantity,
+            clinic_id: clinicId,
+            price_at_time: priceItem?.price_with_vat || 0,
+          };
+        });
 
         const { error: priceItemsError } = await supabase
           .from('visit_price_items')

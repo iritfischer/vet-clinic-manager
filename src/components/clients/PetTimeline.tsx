@@ -17,8 +17,11 @@ import {
   Download,
   Plus,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Send
 } from 'lucide-react';
+import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
+import { VisitWithRelations } from '@/lib/visitSummaryTypes';
 
 type Visit = Tables<'visits'>;
 type Reminder = Tables<'reminders'>;
@@ -79,6 +82,8 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+  const [selectedVisitForSummary, setSelectedVisitForSummary] = useState<VisitWithRelations | null>(null);
 
   useEffect(() => {
     if (clinicId && petId) {
@@ -179,6 +184,30 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
     setExpandedEvent(expandedEvent === eventId ? null : eventId);
   };
 
+  const handleSendSummary = async (visitId: string) => {
+    if (!clinicId) return;
+
+    try {
+      // Fetch full visit with relations
+      const { data: visit, error } = await supabase
+        .from('visits')
+        .select(`
+          *,
+          pets (*),
+          clients (*)
+        `)
+        .eq('id', visitId)
+        .single();
+
+      if (error) throw error;
+
+      setSelectedVisitForSummary(visit as VisitWithRelations);
+      setSummaryDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching visit for summary:', error);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -242,6 +271,17 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
                           ) : (
                             <ChevronDown className="h-5 w-5 text-muted-foreground" />
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSendSummary(event.id);
+                            }}
+                            title="שלח סיכום ביקור"
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
                           {onExportPDF && (
                             <Button
                               variant="ghost"
@@ -250,6 +290,7 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
                                 e.stopPropagation();
                                 onExportPDF(event.id);
                               }}
+                              title="הורד PDF"
                             >
                               <Download className="h-4 w-4" />
                             </Button>
@@ -352,6 +393,13 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
           </div>
         )}
       </CardContent>
+
+      {/* Visit Summary Dialog */}
+      <VisitSummaryDialog
+        open={summaryDialogOpen}
+        onOpenChange={setSummaryDialogOpen}
+        visit={selectedVisitForSummary}
+      />
     </Card>
   );
 };

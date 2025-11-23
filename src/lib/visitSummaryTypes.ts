@@ -17,6 +17,13 @@ export interface MedicationItem {
   duration?: string;
 }
 
+export interface ChargeItem {
+  name: string;
+  quantity: number;
+  pricePerUnit: number;
+  total: number;
+}
+
 export interface VisitSummaryData {
   // Clinic info
   clinicName: string;
@@ -52,6 +59,10 @@ export interface VisitSummaryData {
 
   // Custom notes
   notesToOwner?: string;
+
+  // Charges
+  charges?: ChargeItem[];
+  totalAmount?: number;
 }
 
 export type VisitWithRelations = Tables<'visits'> & {

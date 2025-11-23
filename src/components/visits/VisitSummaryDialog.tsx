@@ -17,7 +17,7 @@ import { he } from 'date-fns/locale';
 
 import { VisitSummaryPreview } from './VisitSummaryPreview';
 import { VisitSummaryEditor } from './VisitSummaryEditor';
-import { VisitSummaryData, VisitWithRelations, DiagnosisItem, TreatmentItem, MedicationItem } from '@/lib/visitSummaryTypes';
+import { VisitSummaryData, VisitWithRelations, DiagnosisItem, TreatmentItem, MedicationItem, ChargeItem } from '@/lib/visitSummaryTypes';
 import { downloadVisitPdfFromElement, openWhatsAppWithPdfFromElement } from '@/lib/generateVisitPdf';
 
 interface VisitSummaryDialogProps {
@@ -76,54 +76,105 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
   useEffect(() => {
     if (!visit || !clinic) return;
 
-    const diagnoses: DiagnosisItem[] = Array.isArray(visit.diagnoses)
-      ? (visit.diagnoses as any[]).map((d) => ({
-          diagnosis: d.diagnosis || '',
-          notes: d.notes || '',
-        }))
-      : [];
+    const initializeSummaryData = async () => {
+      const diagnoses: DiagnosisItem[] = Array.isArray(visit.diagnoses)
+        ? (visit.diagnoses as any[]).map((d) => ({
+            diagnosis: d.diagnosis || '',
+            notes: d.notes || '',
+          }))
+        : [];
 
-    const treatments: TreatmentItem[] = Array.isArray(visit.treatments)
-      ? (visit.treatments as any[]).map((t) => ({
-          treatment: t.treatment || '',
-          notes: t.notes || '',
-        }))
-      : [];
+      const treatments: TreatmentItem[] = Array.isArray(visit.treatments)
+        ? (visit.treatments as any[]).map((t) => ({
+            treatment: t.treatment || '',
+            notes: t.notes || '',
+          }))
+        : [];
 
-    const medications: MedicationItem[] = Array.isArray(visit.medications)
-      ? (visit.medications as any[]).map((m) => ({
-          medication: m.medication || '',
-          dosage: m.dosage || '',
-          frequency: m.frequency || '',
-          duration: m.duration || '',
-        }))
-      : [];
+      const medications: MedicationItem[] = Array.isArray(visit.medications)
+        ? (visit.medications as any[]).map((m) => ({
+            medication: m.medication || '',
+            dosage: m.dosage || '',
+            frequency: m.frequency || '',
+            duration: m.duration || '',
+          }))
+        : [];
 
-    const ownerName = visit.clients
-      ? `${visit.clients.first_name} ${visit.clients.last_name}`
-      : 'לא ידוע';
+      const ownerName = visit.clients
+        ? `${visit.clients.first_name} ${visit.clients.last_name}`
+        : 'לא ידוע';
 
-    setSummaryData({
-      clinicName: clinic.name,
-      clinicLogo: clinic.logo_url || undefined,
-      clinicPhone: clinic.phone || undefined,
-      clinicAddress: clinic.address || undefined,
-      visitDate: format(new Date(visit.visit_date), 'dd/MM/yyyy HH:mm', { locale: he }),
-      visitType: visit.visit_type,
-      petName: visit.pets?.name || 'לא ידוע',
-      petSpecies: visit.pets?.species || 'other',
-      petBreed: visit.pets?.breed || undefined,
-      petSex: visit.pets?.sex || undefined,
-      petWeight: visit.pets?.current_weight || undefined,
-      petAge: calculateAge(visit.pets?.birth_date || null),
-      ownerName,
-      ownerPhone: visit.clients?.phone_primary || '',
-      diagnoses,
-      treatments,
-      medications,
-      recommendations: visit.recommendations || undefined,
-      notesToOwner: visit.client_summary || undefined,
-    });
+      // Fetch visit charges
+      let charges: ChargeItem[] = [];
+      let totalAmount = 0;
+
+      try {
+        // First, get the visit_price_items
+        const { data: visitPriceItems, error: chargesError } = await supabase
+          .from('visit_price_items')
+          .select('*')
+          .eq('visit_id', visit.id);
+
+        if (chargesError) {
+          console.error('Error fetching visit_price_items:', chargesError);
+        }
+
+        if (visitPriceItems && visitPriceItems.length > 0) {
+          // Get unique price_item_ids to fetch their details
+          const priceItemIds = [...new Set(visitPriceItems.map(item => item.price_item_id))];
+
+          // Fetch price_items details
+          const { data: priceItemsData } = await supabase
+            .from('price_items')
+            .select('id, name, price_with_vat')
+            .in('id', priceItemIds);
+
+          // Map to create charges array
+          charges = visitPriceItems.map((item: any) => {
+            const priceItem = priceItemsData?.find(p => p.id === item.price_item_id);
+            // Use price_at_time if available, otherwise use current price from price_items
+            const price = item.price_at_time > 0
+              ? item.price_at_time
+              : (priceItem?.price_with_vat || 0);
+            return {
+              name: priceItem?.name || 'פריט לא ידוע',
+              quantity: item.quantity,
+              pricePerUnit: price,
+              total: item.quantity * price,
+            };
+          });
+          totalAmount = charges.reduce((sum, item) => sum + item.total, 0);
+        }
+      } catch (error) {
+        console.error('Error fetching visit charges:', error);
+      }
+
+      setSummaryData({
+        clinicName: clinic.name,
+        clinicLogo: clinic.logo_url || undefined,
+        clinicPhone: clinic.phone || undefined,
+        clinicAddress: clinic.address || undefined,
+        visitDate: format(new Date(visit.visit_date), 'dd/MM/yyyy HH:mm', { locale: he }),
+        visitType: visit.visit_type,
+        petName: visit.pets?.name || 'לא ידוע',
+        petSpecies: visit.pets?.species || 'other',
+        petBreed: visit.pets?.breed || undefined,
+        petSex: visit.pets?.sex || undefined,
+        petWeight: visit.pets?.current_weight || undefined,
+        petAge: calculateAge(visit.pets?.birth_date || null),
+        ownerName,
+        ownerPhone: visit.clients?.phone_primary || '',
+        diagnoses,
+        treatments,
+        medications,
+        recommendations: visit.recommendations || undefined,
+        notesToOwner: visit.client_summary || undefined,
+        charges,
+        totalAmount,
+      });
+    };
+
+    initializeSummaryData();
   }, [visit, clinic]);
 
   const handleDownloadPdf = async () => {
