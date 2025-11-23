@@ -12,7 +12,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, Download } from 'lucide-react';
+import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, Download, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useClinic } from '@/hooks/useClinic';
@@ -47,6 +47,7 @@ const ClientProfile = () => {
     respiration_rate: string;
     blood_pressure: string;
   }>>({});
+  const [showWeightChart, setShowWeightChart] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (clientId && clinicId) {
@@ -307,7 +308,29 @@ const ClientProfile = () => {
   const getLatestMetrics = (pet: Pet) => {
     const metricsHistory = (pet.metrics_history as any[]) || [];
     if (metricsHistory.length === 0) return null;
-    return metricsHistory[metricsHistory.length - 1];
+    // Sort by date descending and return the most recent
+    const sorted = [...metricsHistory].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA;
+    });
+    return sorted[0];
+  };
+
+  const getWeightChartData = (pet: Pet) => {
+    const metricsHistory = (pet.metrics_history as any[]) || [];
+    // Filter only entries with weight and valid date, sort by date ascending for chart
+    return metricsHistory
+      .filter(m => {
+        if (m.weight == null || !m.date) return false;
+        const d = new Date(m.date);
+        return !isNaN(d.getTime());
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(m => ({
+        date: format(new Date(m.date), 'dd/MM/yy', { locale: he }),
+        weight: m.weight
+      }));
   };
 
   const statusConfig = {
@@ -802,11 +825,123 @@ const ClientProfile = () => {
                             <div className="space-y-4">
                               <div className="flex items-center justify-between flex-row-reverse">
                                 <h3 className="font-semibold">נתונים אחרונים שנמדדו:</h3>
-                                <Button variant="link" size="sm">
-                                  לחץ לקבלת גרף
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  onClick={() => setShowWeightChart(prev => ({
+                                    ...prev,
+                                    [pet.id]: !prev[pet.id]
+                                  }))}
+                                >
+                                  <TrendingUp className="h-4 w-4 ml-1" />
+                                  {showWeightChart[pet.id] ? 'הסתר גרף' : 'לחץ לקבלת גרף'}
                                 </Button>
                               </div>
-                              
+
+                              {/* Weight Chart */}
+                              {showWeightChart[pet.id] && (() => {
+                                const chartData = getWeightChartData(pet);
+                                if (chartData.length === 0) {
+                                  return (
+                                    <div className="p-4 bg-muted/30 rounded-lg text-center">
+                                      <p className="text-muted-foreground">אין נתוני משקל להצגת גרף</p>
+                                    </div>
+                                  );
+                                }
+                                const maxWeight = Math.max(...chartData.map(d => d.weight));
+                                const minWeight = Math.min(...chartData.map(d => d.weight));
+                                const chartMin = minWeight === maxWeight ? minWeight * 0.8 : minWeight * 0.95;
+                                const chartMax = minWeight === maxWeight ? maxWeight * 1.2 : maxWeight * 1.05;
+                                const range = chartMax - chartMin || 1;
+                                const chartHeight = 150;
+                                const chartWidth = Math.max(chartData.length * 60, 300);
+
+                                // Calculate points for the line
+                                const points = chartData.map((d, idx) => {
+                                  const x = (idx / (chartData.length - 1 || 1)) * (chartWidth - 40) + 20;
+                                  const y = chartHeight - ((d.weight - chartMin) / range) * (chartHeight - 20) - 10;
+                                  return { x, y, weight: d.weight, date: d.date };
+                                });
+
+                                // Create SVG path
+                                const linePath = points.map((p, idx) =>
+                                  `${idx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
+                                ).join(' ');
+
+                                return (
+                                  <div className="p-4 bg-muted/30 rounded-lg space-y-2">
+                                    <h4 className="text-sm font-medium text-center">מגמת משקל</h4>
+                                    <div className="overflow-x-auto">
+                                      <svg
+                                        width={chartWidth}
+                                        height={chartHeight + 40}
+                                        className="mx-auto"
+                                        dir="ltr"
+                                      >
+                                        {/* Grid lines */}
+                                        {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => (
+                                          <line
+                                            key={idx}
+                                            x1={20}
+                                            y1={chartHeight - ratio * (chartHeight - 20) - 10}
+                                            x2={chartWidth - 20}
+                                            y2={chartHeight - ratio * (chartHeight - 20) - 10}
+                                            stroke="currentColor"
+                                            strokeOpacity={0.1}
+                                          />
+                                        ))}
+
+                                        {/* Line */}
+                                        <path
+                                          d={linePath}
+                                          fill="none"
+                                          stroke="hsl(var(--primary))"
+                                          strokeWidth={2}
+                                        />
+
+                                        {/* Points and labels */}
+                                        {points.map((p, idx) => (
+                                          <g key={idx}>
+                                            <circle
+                                              cx={p.x}
+                                              cy={p.y}
+                                              r={5}
+                                              fill="hsl(var(--primary))"
+                                              className="cursor-pointer hover:r-7"
+                                            >
+                                              <title>{`${p.date}: ${p.weight} ק"ג`}</title>
+                                            </circle>
+                                            <text
+                                              x={p.x}
+                                              y={p.y - 10}
+                                              textAnchor="middle"
+                                              fontSize={10}
+                                              fill="hsl(var(--primary))"
+                                              fontWeight="bold"
+                                            >
+                                              {p.weight}
+                                            </text>
+                                            <text
+                                              x={p.x}
+                                              y={chartHeight + 20}
+                                              textAnchor="middle"
+                                              fontSize={9}
+                                              fill="currentColor"
+                                              opacity={0.6}
+                                            >
+                                              {p.date}
+                                            </text>
+                                          </g>
+                                        ))}
+                                      </svg>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground text-center">
+                                      משקל בק"ג
+                                    </p>
+                                  </div>
+                                );
+                              })()}
+
                               {(() => {
                                 const latestMetrics = getLatestMetrics(pet);
                                 return (
