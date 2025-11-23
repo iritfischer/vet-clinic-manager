@@ -7,6 +7,7 @@ import { Tables } from '@/integrations/supabase/types';
 import { useClinic } from '@/hooks/useClinic';
 import { VisitsTable } from '@/components/visits/VisitsTable';
 import { VisitDialog } from '@/components/visits/VisitDialog';
+import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
 import { useToast } from '@/hooks/use-toast';
 
 type Visit = Tables<'visits'> & {
@@ -19,6 +20,8 @@ const Visits = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVisit, setEditingVisit] = useState<Visit | null>(null);
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+  const [summaryVisit, setSummaryVisit] = useState<Visit | null>(null);
   const { clinicId } = useClinic();
   const { toast } = useToast();
 
@@ -277,51 +280,9 @@ const Visits = () => {
     }
   };
 
-  const handleSendWhatsApp = async (visit: Visit) => {
-    if (!visit.clients?.phone_primary) {
-      toast({
-        title: 'שגיאה',
-        description: 'אין מספר טלפון ללקוח',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      const message = `
-שלום ${visit.clients.first_name},
-
-סיכום הביקור של ${visit.pets?.name} מיום ${new Date(visit.visit_date).toLocaleDateString('he-IL')}:
-
-${visit.client_summary || 'לא הוזן סיכום'}
-
-${visit.recommendations ? `המלצות: ${visit.recommendations}` : ''}
-
-בברכה,
-${clinicId ? 'צוות המרפאה' : ''}
-      `.trim();
-
-      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-        body: {
-          phone: visit.clients.phone_primary,
-          message,
-          visitId: visit.id,
-        },
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: 'הודעה נשלחה בהצלחה',
-        description: `נשלח ל-${visit.clients.phone_primary}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: 'שגיאה בשליחת הודעה',
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
+  const handleSendWhatsApp = (visit: Visit) => {
+    setSummaryVisit(visit);
+    setSummaryDialogOpen(true);
   };
 
   const handleCloseDialog = () => {
@@ -364,6 +325,12 @@ ${clinicId ? 'צוות המרפאה' : ''}
           onClose={handleCloseDialog}
           onSave={handleSave}
           visit={editingVisit}
+        />
+
+        <VisitSummaryDialog
+          open={summaryDialogOpen}
+          onOpenChange={setSummaryDialogOpen}
+          visit={summaryVisit}
         />
       </div>
     </DashboardLayout>

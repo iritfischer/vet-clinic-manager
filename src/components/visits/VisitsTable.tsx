@@ -115,9 +115,10 @@ export const VisitsTable = ({ visits, onEdit, onDelete, onGeneratePdf, onSendWha
                     variant="outline"
                     size="sm"
                     onClick={() => onSendWhatsApp(visit)}
+                    className="bg-green-50 hover:bg-green-100 border-green-200"
                   >
-                    <Send className="h-4 w-4 ml-2" />
-                    שלח WhatsApp
+                    <Send className="h-4 w-4 ml-2 text-green-600" />
+                    שלח סיכום
                   </Button>
                   <Button
                     variant="outline"
