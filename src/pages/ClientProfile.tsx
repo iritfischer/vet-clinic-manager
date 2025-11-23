@@ -12,7 +12,18 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, Download, TrendingUp } from 'lucide-react';
+import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, Download, TrendingUp, Syringe, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { addDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useClinic } from '@/hooks/useClinic';
@@ -48,6 +59,33 @@ const ClientProfile = () => {
     blood_pressure: string;
   }>>({});
   const [showWeightChart, setShowWeightChart] = useState<Record<string, boolean>>({});
+  const [showVaccinationForm, setShowVaccinationForm] = useState<string | null>(null); // petId or null
+  const [vaccinationForm, setVaccinationForm] = useState({
+    vaccination_type: '',
+    vaccination_date: new Date().toISOString().slice(0, 10),
+    skip_reminder: false,
+  });
+
+  // סוגי חיסונים
+  const VACCINATION_TYPES = {
+    dog: [
+      { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
+      { value: 'dhpp', label: 'משושה (DHPP)', nextDueDays: 365 },
+      { value: 'leptospirosis', label: 'לפטוספירוזיס', nextDueDays: 365 },
+      { value: 'bordetella', label: 'בורדטלה (שיעול מלונות)', nextDueDays: 180 },
+      { value: 'lyme', label: 'ליים', nextDueDays: 365 },
+    ],
+    cat: [
+      { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
+      { value: 'fvrcp', label: 'משולש (FVRCP)', nextDueDays: 365 },
+      { value: 'felv', label: 'לויקמיה (FeLV)', nextDueDays: 365 },
+      { value: 'fiv', label: 'איידס חתולים (FIV)', nextDueDays: 365 },
+    ],
+    other: [
+      { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
+      { value: 'other', label: 'אחר', nextDueDays: 365 },
+    ],
+  };
 
   useEffect(() => {
     if (clientId && clinicId) {
@@ -295,6 +333,99 @@ const ClientProfile = () => {
         respiration_rate: '',
         blood_pressure: '',
       }}));
+      fetchClientData();
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveVaccination = async (petId: string) => {
+    try {
+      if (!vaccinationForm.vaccination_type || !vaccinationForm.vaccination_date) {
+        toast({
+          title: 'שגיאה',
+          description: 'יש למלא את כל השדות',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const pet = pets.find(p => p.id === petId);
+      if (!pet || !client) return;
+
+      // מצא את סוג החיסון לקבלת התווית
+      const species = pet.species?.toLowerCase() || 'other';
+      const vaccineList = species.includes('כלב') || species.includes('dog')
+        ? VACCINATION_TYPES.dog
+        : species.includes('חתול') || species.includes('cat')
+        ? VACCINATION_TYPES.cat
+        : VACCINATION_TYPES.other;
+      const selectedVaccine = vaccineList.find(v => v.value === vaccinationForm.vaccination_type);
+
+      if (!selectedVaccine) return;
+
+      // צור ביקור מסוג חיסון
+      const visitType = `vaccination:${vaccinationForm.vaccination_type}:${selectedVaccine.label}`;
+
+      // המר תאריך לפורמט datetime
+      const visitDateTime = `${vaccinationForm.vaccination_date}T12:00:00`;
+
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .insert({
+          clinic_id: clinicId,
+          client_id: client.id,
+          pet_id: petId,
+          visit_type: visitType,
+          visit_date: visitDateTime,
+          status: 'closed',
+        })
+        .select()
+        .single();
+
+      if (visitError) {
+        console.error('Visit insert error:', visitError);
+        throw visitError;
+      }
+
+      // צור תזכורת לחיסון הבא (אם לא ביקשו לדלג)
+      let reminderMessage = '';
+      if (!vaccinationForm.skip_reminder) {
+        const vaccinationDate = new Date(vaccinationForm.vaccination_date);
+        const nextDueDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
+
+        const { error: reminderError } = await supabase
+          .from('reminders')
+          .insert({
+            clinic_id: clinicId,
+            client_id: client.id,
+            pet_id: petId,
+            reminder_type: 'vaccination',
+            due_date: nextDueDate.toISOString().slice(0, 10),
+            notes: `חיסון ${selectedVaccine.label}`,
+            status: 'open',
+          });
+
+        if (reminderError) throw reminderError;
+        reminderMessage = `. תזכורת נוצרה ל-${format(nextDueDate, 'dd/MM/yyyy', { locale: he })}`;
+      }
+
+      toast({
+        title: 'הצלחה',
+        description: `חיסון ${selectedVaccine.label} נשמר בהצלחה${reminderMessage}`,
+      });
+
+      // נקה טופס וסגור
+      setShowVaccinationForm(null);
+      setVaccinationForm({
+        vaccination_type: '',
+        vaccination_date: new Date().toISOString().slice(0, 10),
+        skip_reminder: false,
+      });
       fetchClientData();
     } catch (error: any) {
       toast({
@@ -1120,15 +1251,181 @@ const ClientProfile = () => {
                       </TabsContent>
 
                       {/* Vaccinations Tab */}
-                      <TabsContent value="vaccinations" className="mt-6">
+                      <TabsContent value="vaccinations" className="mt-6" dir="rtl">
                         <Card>
                           <CardHeader>
-                            <CardTitle className="text-right">חיסונים</CardTitle>
+                            <div className="flex items-center justify-between">
+                              <CardTitle>חיסונים</CardTitle>
+                              <Button
+                                size="sm"
+                                onClick={() => setShowVaccinationForm(showVaccinationForm === pet.id ? null : pet.id)}
+                              >
+                                <Plus className="h-4 w-4 ml-2" />
+                                הוסף חיסון
+                              </Button>
+                            </div>
                           </CardHeader>
-                          <CardContent className="text-right">
-                            <p className="text-center text-muted-foreground py-8">
-                              רשומות חיסונים יופיעו כאן
-                            </p>
+                          <CardContent>
+                            {/* טופס הוספת חיסון */}
+                            {showVaccinationForm === pet.id && (
+                              <div className="mb-6 p-4 border-2 border-blue-200 rounded-lg bg-blue-50">
+                                <div className="flex items-center justify-between mb-4">
+                                  <h4 className="font-medium text-blue-800 flex items-center gap-2">
+                                    <Syringe className="h-4 w-4" />
+                                    הוספת חיסון חדש
+                                  </h4>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowVaccinationForm(null)}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                  <div className="space-y-2">
+                                    <Label>סוג החיסון</Label>
+                                    <Select
+                                      value={vaccinationForm.vaccination_type}
+                                      onValueChange={(value) => setVaccinationForm(prev => ({ ...prev, vaccination_type: value }))}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="בחר סוג חיסון" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {(() => {
+                                          const species = pet.species?.toLowerCase() || 'other';
+                                          const vaccineList = species.includes('כלב') || species.includes('dog')
+                                            ? VACCINATION_TYPES.dog
+                                            : species.includes('חתול') || species.includes('cat')
+                                            ? VACCINATION_TYPES.cat
+                                            : VACCINATION_TYPES.other;
+                                          return vaccineList.map((vaccine) => (
+                                            <SelectItem key={vaccine.value} value={vaccine.value}>
+                                              {vaccine.label}
+                                            </SelectItem>
+                                          ));
+                                        })()}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label>תאריך החיסון</Label>
+                                    <Input
+                                      type="date"
+                                      value={vaccinationForm.vaccination_date}
+                                      onChange={(e) => setVaccinationForm(prev => ({ ...prev, vaccination_date: e.target.value }))}
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* תצוגת תאריך חיסון הבא */}
+                                {vaccinationForm.vaccination_type && vaccinationForm.vaccination_date && (() => {
+                                  const species = pet.species?.toLowerCase() || 'other';
+                                  const vaccineList = species.includes('כלב') || species.includes('dog')
+                                    ? VACCINATION_TYPES.dog
+                                    : species.includes('חתול') || species.includes('cat')
+                                    ? VACCINATION_TYPES.cat
+                                    : VACCINATION_TYPES.other;
+                                  const selectedVaccine = vaccineList.find(v => v.value === vaccinationForm.vaccination_type);
+
+                                  if (selectedVaccine) {
+                                    const vaccinationDate = new Date(vaccinationForm.vaccination_date);
+                                    const nextVaccinationDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
+
+                                    return (
+                                      <div className="bg-green-100 border border-green-300 rounded-lg p-3 mb-4">
+                                        <div className="flex items-center gap-2 text-green-800 flex-wrap">
+                                          <Calendar className="h-4 w-4" />
+                                          <span className="font-medium">חיסון הבא:</span>
+                                          <span className="font-bold">
+                                            {format(nextVaccinationDate, 'dd/MM/yyyy', { locale: he })}
+                                          </span>
+                                          <span className="text-sm text-green-600">
+                                            ({selectedVaccine.nextDueDays === 365 ? 'שנה' : selectedVaccine.nextDueDays === 180 ? '6 חודשים' : `${selectedVaccine.nextDueDays} ימים`})
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+
+                                {/* אפשרות לדלג על תזכורת */}
+                                <div className="flex items-center gap-2 mb-4">
+                                  <Checkbox
+                                    id={`skip-reminder-${pet.id}`}
+                                    checked={vaccinationForm.skip_reminder}
+                                    onCheckedChange={(checked) =>
+                                      setVaccinationForm(prev => ({ ...prev, skip_reminder: checked === true }))
+                                    }
+                                  />
+                                  <Label
+                                    htmlFor={`skip-reminder-${pet.id}`}
+                                    className="text-sm text-muted-foreground cursor-pointer"
+                                  >
+                                    אין צורך בתזכורת (עדכון רטרואקטיבי)
+                                  </Label>
+                                </div>
+
+                                <Button
+                                  onClick={() => handleSaveVaccination(pet.id)}
+                                  className="w-full"
+                                >
+                                  <Syringe className="h-4 w-4 ml-2" />
+                                  שמור חיסון
+                                </Button>
+                              </div>
+                            )}
+
+                            {/* רשימת חיסונים */}
+                            {(() => {
+                              const vaccinationVisits = visitsByPet[pet.id]?.filter(
+                                (visit) => visit.visit_type?.startsWith('vaccination:')
+                              ) || [];
+
+                              if (vaccinationVisits.length === 0 && showVaccinationForm !== pet.id) {
+                                return (
+                                  <p className="text-center text-muted-foreground py-8">
+                                    אין רשומות חיסונים
+                                  </p>
+                                );
+                              }
+
+                              const sortedVaccinations = [...vaccinationVisits].sort(
+                                (a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime()
+                              );
+
+                              return (
+                                <div className="space-y-3">
+                                  {sortedVaccinations.map((visit) => {
+                                    const parts = visit.visit_type.split(':');
+                                    const vaccineName = parts[2] || parts[1] || 'חיסון';
+
+                                    return (
+                                      <div
+                                        key={visit.id}
+                                        className="flex items-center justify-between p-4 border rounded-lg bg-green-50 border-green-200"
+                                      >
+                                        <div className="text-right">
+                                          <p className="font-medium text-green-800">{vaccineName}</p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {format(new Date(visit.visit_date), 'dd/MM/yyyy', { locale: he })}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                                            בוצע
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </CardContent>
                         </Card>
                       </TabsContent>

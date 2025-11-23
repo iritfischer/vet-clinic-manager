@@ -15,20 +15,56 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, Calendar, Syringe } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { format, addDays } from 'date-fns';
+import { he } from 'date-fns/locale';
 
 type Visit = Tables<'visits'>;
 type Client = Tables<'clients'>;
 type Pet = Tables<'pets'>;
 type PriceItem = Tables<'price_items'>;
 
+// סוגי ביקור קבועים
+const VISIT_TYPES = [
+  { value: 'checkup', label: 'בדיקה כללית' },
+  { value: 'vaccination', label: 'חיסון' },
+  { value: 'surgery', label: 'ניתוח' },
+  { value: 'dental', label: 'טיפול שיניים' },
+  { value: 'emergency', label: 'חירום' },
+  { value: 'grooming', label: 'טיפוח' },
+  { value: 'other', label: 'אחר' },
+];
+
+// סוגי חיסונים עם מרווחי זמן לתזכורת הבאה (בימים)
+const VACCINATION_TYPES = {
+  dog: [
+    { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
+    { value: 'dhpp', label: 'משושה (DHPP)', nextDueDays: 365 },
+    { value: 'leptospirosis', label: 'לפטוספירוזיס', nextDueDays: 365 },
+    { value: 'bordetella', label: 'בורדטלה (שיעול מלונות)', nextDueDays: 180 },
+    { value: 'lyme', label: 'ליים', nextDueDays: 365 },
+  ],
+  cat: [
+    { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
+    { value: 'fvrcp', label: 'משולש (FVRCP)', nextDueDays: 365 },
+    { value: 'felv', label: 'לויקמיה (FeLV)', nextDueDays: 365 },
+    { value: 'fiv', label: 'איידס חתולים (FIV)', nextDueDays: 365 },
+  ],
+  other: [
+    { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
+    { value: 'other', label: 'אחר', nextDueDays: 365 },
+  ],
+};
+
 const visitSchema = z.object({
   client_id: z.string().min(1, 'יש לבחור לקוח'),
   pet_id: z.string().min(1, 'יש לבחור חיית מחמד'),
   visit_type: z.string().min(1, 'יש לבחור סוג ביקור').max(100),
+  vaccination_type: z.string().optional(),
+  vaccination_date: z.string().optional(),
   visit_date: z.string().min(1, 'יש להזין תאריך'),
   chief_complaint: z.string().max(1000).optional().or(z.literal('')),
   history: z.string().max(2000).optional().or(z.literal('')),
@@ -83,6 +119,8 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       client_id: preSelectedClientId || '',
       pet_id: preSelectedPetId || '',
       visit_type: '',
+      vaccination_type: '',
+      vaccination_date: new Date().toISOString().slice(0, 10),
       visit_date: new Date().toISOString().slice(0, 16),
       chief_complaint: '',
       history: '',
@@ -178,11 +216,27 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   };
 
   const onSubmit = (data: VisitFormData) => {
+    // בנה את visit_type - אם זה חיסון, הוסף את סוג החיסון
+    let finalVisitType = data.visit_type;
+    if (data.visit_type === 'vaccination' && data.vaccination_type) {
+      const selectedPet = pets.find(p => p.id === data.pet_id);
+      const species = selectedPet?.species?.toLowerCase() || 'other';
+      const vaccineList = species.includes('כלב') || species.includes('dog')
+        ? VACCINATION_TYPES.dog
+        : species.includes('חתול') || species.includes('cat')
+        ? VACCINATION_TYPES.cat
+        : VACCINATION_TYPES.other;
+      const selectedVaccine = vaccineList.find(v => v.value === data.vaccination_type);
+      if (selectedVaccine) {
+        finalVisitType = `vaccination:${data.vaccination_type}:${selectedVaccine.label}`;
+      }
+    }
+
     // Build clean data with only the fields we need
     const cleanedData = {
       client_id: data.client_id,
       pet_id: data.pet_id,
-      visit_type: data.visit_type,
+      visit_type: finalVisitType,
       visit_date: data.visit_date,
       chief_complaint: data.chief_complaint || null,
       history: data.history || null,
@@ -194,12 +248,39 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       medications: data.medications?.length ? data.medications : null,
       status: data.status,
     };
-    
+
+    // אם זה ביקור חיסון, צור תזכורת אוטומטית לחיסון הבא
+    let followUps = [...(data.follow_ups || [])];
+
+    if (data.visit_type === 'vaccination' && data.vaccination_type) {
+      const selectedPet = pets.find(p => p.id === data.pet_id);
+      const species = selectedPet?.species?.toLowerCase() || 'other';
+      const vaccineList = species.includes('כלב') || species.includes('dog')
+        ? VACCINATION_TYPES.dog
+        : species.includes('חתול') || species.includes('cat')
+        ? VACCINATION_TYPES.cat
+        : VACCINATION_TYPES.other;
+
+      const selectedVaccine = vaccineList.find(v => v.value === data.vaccination_type);
+      if (selectedVaccine) {
+        // חשב את תאריך החיסון הבא מתאריך החיסון שהוזן
+        const vaccinationDate = new Date(data.vaccination_date || data.visit_date);
+        const nextDueDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
+
+        // הוסף תזכורת אוטומטית לחיסון הבא
+        followUps.push({
+          due_date: nextDueDate.toISOString().slice(0, 10),
+          notes: `חיסון ${selectedVaccine.label}`,
+          reminder_type: 'vaccination',
+        });
+      }
+    }
+
     // Send with follow_ups and price_items as separate properties
-    onSave({ 
+    onSave({
       ...cleanedData,
-      _follow_ups: data.follow_ups, 
-      _price_items: data.price_items 
+      _follow_ups: followUps,
+      _price_items: data.price_items
     });
   };
 
@@ -283,7 +364,27 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>סוג ביקור *</Label>
-                  <Input {...register('visit_type')} className="text-right" placeholder="בדיקה כללית, חיסון, ניתוח..." />
+                  <Select
+                    value={watch('visit_type') || ''}
+                    onValueChange={(value) => {
+                      setValue('visit_type', value, { shouldValidate: true });
+                      // נקה את סוג החיסון אם שינו מחיסון לסוג אחר
+                      if (value !== 'vaccination') {
+                        setValue('vaccination_type', '');
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="בחר סוג ביקור" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VISIT_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {errors.visit_type && (
                     <p className="text-sm text-destructive">{errors.visit_type.message}</p>
                   )}
@@ -297,6 +398,94 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   )}
                 </div>
               </div>
+
+              {/* בחירת סוג חיסון - מופיע רק כשסוג הביקור הוא חיסון */}
+              {watch('visit_type') === 'vaccination' && (
+                <div className="space-y-4 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-blue-800 flex items-center gap-2">
+                        <Syringe className="h-4 w-4" />
+                        סוג החיסון *
+                      </Label>
+                      <Select
+                        value={watch('vaccination_type') || ''}
+                        onValueChange={(value) => setValue('vaccination_type', value)}
+                      >
+                        <SelectTrigger className="text-right bg-white">
+                          <SelectValue placeholder="בחר סוג חיסון" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(() => {
+                            const selectedPet = pets.find(p => p.id === watch('pet_id'));
+                            const species = selectedPet?.species?.toLowerCase() || 'other';
+                            const vaccineList = species.includes('כלב') || species.includes('dog')
+                              ? VACCINATION_TYPES.dog
+                              : species.includes('חתול') || species.includes('cat')
+                              ? VACCINATION_TYPES.cat
+                              : VACCINATION_TYPES.other;
+                            return vaccineList.map((vaccine) => (
+                              <SelectItem key={vaccine.value} value={vaccine.value}>
+                                {vaccine.label}
+                              </SelectItem>
+                            ));
+                          })()}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-blue-800 flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        תאריך החיסון
+                      </Label>
+                      <Input
+                        type="date"
+                        {...register('vaccination_date')}
+                        className="bg-white text-right"
+                        defaultValue={new Date().toISOString().slice(0, 10)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* תצוגת תאריך החיסון הבא */}
+                  {watch('vaccination_type') && (() => {
+                    const selectedPet = pets.find(p => p.id === watch('pet_id'));
+                    const species = selectedPet?.species?.toLowerCase() || 'other';
+                    const vaccineList = species.includes('כלב') || species.includes('dog')
+                      ? VACCINATION_TYPES.dog
+                      : species.includes('חתול') || species.includes('cat')
+                      ? VACCINATION_TYPES.cat
+                      : VACCINATION_TYPES.other;
+                    const selectedVaccine = vaccineList.find(v => v.value === watch('vaccination_type'));
+
+                    if (selectedVaccine) {
+                      const vaccinationDateStr = watch('vaccination_date') || new Date().toISOString().slice(0, 10);
+                      const vaccinationDate = new Date(vaccinationDateStr);
+                      const nextVaccinationDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
+
+                      return (
+                        <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+                          <div className="flex items-center gap-2 text-green-800 flex-wrap">
+                            <Calendar className="h-4 w-4" />
+                            <span className="font-medium">חיסון הבא:</span>
+                            <span className="font-bold">
+                              {format(nextVaccinationDate, 'dd/MM/yyyy', { locale: he })}
+                            </span>
+                            <span className="text-sm text-green-600">
+                              ({selectedVaccine.nextDueDays === 365 ? 'שנה' : selectedVaccine.nextDueDays === 180 ? '6 חודשים' : `${selectedVaccine.nextDueDays} ימים`})
+                            </span>
+                          </div>
+                          <p className="text-xs text-green-600 mt-1">
+                            תזכורת תיווצר אוטומטית בעת שמירת הביקור
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>תלונה עיקרית</Label>

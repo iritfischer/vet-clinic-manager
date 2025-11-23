@@ -51,6 +51,29 @@ const reminderTypeLabels: Record<string, string> = {
   general: 'כללי',
 };
 
+// תרגום סוגי ביקור
+const visitTypeLabels: Record<string, string> = {
+  checkup: 'בדיקה כללית',
+  vaccination: 'חיסון',
+  surgery: 'ניתוח',
+  dental: 'טיפול שיניים',
+  emergency: 'חירום',
+  grooming: 'טיפוח',
+  other: 'אחר',
+};
+
+// פונקציה לתרגום סוג ביקור
+const formatVisitType = (visitType: string): string => {
+  // אם זה חיסון עם פרטים (vaccination:rabies:כלבת)
+  if (visitType.startsWith('vaccination:')) {
+    const parts = visitType.split(':');
+    const vaccineName = parts[2] || parts[1] || 'חיסון';
+    return `חיסון - ${vaccineName}`;
+  }
+  // אחרת, תרגם לפי המילון
+  return visitTypeLabels[visitType] || visitType;
+};
+
 export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF }: PetTimelineProps) => {
   const { clinicId } = useClinic();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -89,16 +112,18 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
 
       // Add visits
       visits?.forEach(visit => {
+        // בחר אייקון וצבע מתאים לסוג הביקור
+        const isVaccination = visit.visit_type.startsWith('vaccination');
         timelineEvents.push({
           id: visit.id,
           type: 'visit',
           date: visit.visit_date,
-          title: visit.visit_type,
+          title: formatVisitType(visit.visit_type),
           subtitle: visit.chief_complaint || undefined,
           details: visit,
           status: visit.status || 'open',
-          icon: <Stethoscope className="h-4 w-4" />,
-          color: 'bg-blue-500',
+          icon: isVaccination ? <Syringe className="h-4 w-4" /> : <Stethoscope className="h-4 w-4" />,
+          color: isVaccination ? 'bg-green-500' : 'bg-blue-500',
         });
       });
 
@@ -212,6 +237,11 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
                           </Badge>
                         </div>
                         <div className="flex items-center gap-2">
+                          {expandedEvent === event.id ? (
+                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          )}
                           {onExportPDF && (
                             <Button
                               variant="ghost"
@@ -223,11 +253,6 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
                             >
                               <Download className="h-4 w-4" />
                             </Button>
-                          )}
-                          {expandedEvent === event.id ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
                           )}
                         </div>
                       </button>
