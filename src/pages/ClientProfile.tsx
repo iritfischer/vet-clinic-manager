@@ -12,7 +12,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, Download, TrendingUp, Syringe, X } from 'lucide-react';
+import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, Download, TrendingUp, Syringe, X, MessageCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -32,6 +32,17 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { VisitForm } from '@/components/visits/VisitForm';
 import { PetTimeline } from '@/components/clients/PetTimeline';
+import { ClientWhatsAppChat } from '@/components/clients/ClientWhatsAppChat';
+import { useWhatsApp } from '@/hooks/useWhatsApp';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 type Client = Tables<'clients'>;
 type Pet = Tables<'pets'>;
@@ -42,8 +53,9 @@ type Visit = Tables<'visits'> & {
 const ClientProfile = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { clinicId } = useClinic();
+  const { clinicId, clinic } = useClinic();
   const { toast } = useToast();
+  const { sendMessage, isEnabled: whatsappEnabled, isConfigured: whatsappConfigured } = useWhatsApp();
   const [client, setClient] = useState<Client | null>(null);
   const [pets, setPets] = useState<Pet[]>([]);
   const [visitsByPet, setVisitsByPet] = useState<Record<string, Visit[]>>({});
@@ -65,6 +77,11 @@ const ClientProfile = () => {
     vaccination_date: new Date().toISOString().slice(0, 10),
     skip_reminder: false,
   });
+
+  // WhatsApp state
+  const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
+  const [whatsappMessage, setWhatsappMessage] = useState('');
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
 
   // סוגי חיסונים
   const VACCINATION_TYPES = {
@@ -446,6 +463,25 @@ const ClientProfile = () => {
     }
   };
 
+  // WhatsApp send function
+  const handleSendWhatsApp = async () => {
+    if (!client || !whatsappMessage.trim()) return;
+
+    setSendingWhatsapp(true);
+    try {
+      const result = await sendMessage(client.phone_primary, whatsappMessage, {
+        clientId: client.id,
+      });
+
+      if (result.success) {
+        setWhatsappDialogOpen(false);
+        setWhatsappMessage('');
+      }
+    } finally {
+      setSendingWhatsapp(false);
+    }
+  };
+
   const getLatestMetrics = (pet: Pet) => {
     const metricsHistory = (pet.metrics_history as any[]) || [];
     if (metricsHistory.length === 0) return null;
@@ -526,6 +562,56 @@ const ClientProfile = () => {
                   </p>
                 </div>
               </div>
+
+              {/* WhatsApp Button */}
+              {whatsappConfigured && whatsappEnabled && (
+                <Dialog open={whatsappDialogOpen} onOpenChange={setWhatsappDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2 text-green-600 border-green-200 hover:bg-green-50"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      שלח הודעת WhatsApp
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md" dir="rtl">
+                    <DialogHeader>
+                      <DialogTitle>שליחת הודעת WhatsApp</DialogTitle>
+                      <DialogDescription>
+                        שלח הודעה ל-{client.first_name} {client.last_name}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">תוכן ההודעה</label>
+                        <Textarea
+                          placeholder="כתוב את ההודעה כאן..."
+                          value={whatsappMessage}
+                          onChange={(e) => setWhatsappMessage(e.target.value)}
+                          rows={6}
+                          className="resize-none text-right"
+                        />
+                      </div>
+                      <Button
+                        onClick={handleSendWhatsApp}
+                        disabled={!whatsappMessage.trim() || sendingWhatsapp}
+                        className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                      >
+                        {sendingWhatsapp ? (
+                          'שולח...'
+                        ) : (
+                          <>
+                            <MessageCircle className="h-4 w-4" />
+                            שלח
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
 
               {client.phone_secondary && (
                 <div className="flex items-start gap-3 flex-row-reverse">
@@ -611,6 +697,30 @@ const ClientProfile = () => {
 
           {/* Main Content - Pets and Visits */}
           <div className="lg:col-span-4 space-y-6">
+            {/* Client-level Tabs (WhatsApp, Pets) */}
+            <Tabs defaultValue="pets" className="w-full" dir="rtl">
+              <TabsList className="grid w-full grid-cols-2 h-auto">
+                <TabsTrigger value="pets" className="gap-2">
+                  <Stethoscope className="h-4 w-4" />
+                  חיות מחמד ({pets.length})
+                </TabsTrigger>
+                <TabsTrigger value="whatsapp" className="gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  שיחות WhatsApp
+                </TabsTrigger>
+              </TabsList>
+
+              {/* WhatsApp Tab Content */}
+              <TabsContent value="whatsapp" className="mt-6">
+                <ClientWhatsAppChat
+                  clientId={client.id}
+                  clientName={`${client.first_name} ${client.last_name}`}
+                  clientPhone={client.phone_primary}
+                />
+              </TabsContent>
+
+              {/* Pets Tab Content */}
+              <TabsContent value="pets" className="mt-6">
             {/* Pets Tabs */}
             {pets.length === 0 ? (
               <Card>
@@ -1501,6 +1611,8 @@ const ClientProfile = () => {
                 ))}
               </Tabs>
             )}
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </div>

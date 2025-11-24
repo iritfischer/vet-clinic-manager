@@ -22,9 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Check, X, Phone, Calendar, Bell } from 'lucide-react';
+import { Loader2, Check, X, Phone, Calendar, Bell, MessageCircle, Send } from 'lucide-react';
 import { format, isToday, isTomorrow, isPast, addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
+import { useWhatsApp } from '@/hooks/useWhatsApp';
+import { messageTemplates } from '@/lib/whatsappService';
 
 type Reminder = Tables<'reminders'> & {
   clients?: Tables<'clients'> | null;
@@ -43,8 +45,10 @@ const Reminders = () => {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'open' | 'completed'>('open');
-  const { clinicId } = useClinic();
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const { clinicId, clinic } = useClinic();
   const { toast } = useToast();
+  const { sendMessage, isEnabled: whatsappEnabled, isConfigured: whatsappConfigured } = useWhatsApp();
 
   useEffect(() => {
     if (clinicId) {
@@ -160,10 +164,58 @@ const Reminders = () => {
     }
   };
 
-  const openWhatsApp = (phone: string, reminder: Reminder) => {
-    const message = `שלום, תזכורת מהמרפאה הווטרינרית:\n${reminderTypeLabels[reminder.reminder_type] || reminder.reminder_type} עבור ${reminder.pets?.name}\nתאריך: ${format(new Date(reminder.due_date), 'dd/MM/yyyy', { locale: he })}\n${reminder.notes || ''}`;
-    const url = `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+  const sendWhatsAppReminder = async (reminder: Reminder) => {
+    if (!reminder.clients?.phone_primary || !reminder.pets?.name) return;
+
+    const clinicName = clinic?.name || 'המרפאה הווטרינרית';
+    const petName = reminder.pets.name;
+    const dueDate = format(new Date(reminder.due_date), 'dd/MM/yyyy', { locale: he });
+
+    let message = '';
+    if (reminder.reminder_type === 'vaccination') {
+      message = messageTemplates.vaccinationReminder(
+        clinicName,
+        petName,
+        reminder.notes || reminderTypeLabels[reminder.reminder_type],
+        dueDate
+      );
+    } else {
+      message = messageTemplates.generalReminder(
+        clinicName,
+        petName,
+        `${reminderTypeLabels[reminder.reminder_type] || reminder.reminder_type} בתאריך ${dueDate}${reminder.notes ? `\n${reminder.notes}` : ''}`
+      );
+    }
+
+    // If Green API is configured, use it
+    if (whatsappConfigured && whatsappEnabled) {
+      setSendingReminderId(reminder.id);
+      try {
+        const result = await sendMessage(reminder.clients.phone_primary, message, {
+          clientId: reminder.client_id,
+          reminderId: reminder.id,
+        });
+
+        if (result.success) {
+          // Update reminder to mark that WhatsApp was sent
+          await supabase
+            .from('reminders')
+            .update({
+              last_channel: 'whatsapp',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', reminder.id);
+
+          fetchReminders();
+        }
+      } finally {
+        setSendingReminderId(null);
+      }
+    } else {
+      // Fallback to wa.me link
+      const url = `https://wa.me/${reminder.clients.phone_primary.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
+    }
   };
 
   // Stats
@@ -298,10 +350,15 @@ const Reminders = () => {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => openWhatsApp(reminder.clients!.phone_primary, reminder)}
-                            title="שלח WhatsApp"
+                            onClick={() => sendWhatsAppReminder(reminder)}
+                            title="שלח תזכורת WhatsApp"
+                            disabled={sendingReminderId === reminder.id}
                           >
-                            <Phone className="h-4 w-4 text-green-600" />
+                            {sendingReminderId === reminder.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                            ) : (
+                              <MessageCircle className="h-4 w-4 text-green-600" />
+                            )}
                           </Button>
                         )}
                       </div>

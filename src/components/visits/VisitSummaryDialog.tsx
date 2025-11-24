@@ -231,9 +231,15 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         summaryData,
         clinicId || undefined
       );
-      if (result.pdfUrl) {
+
+      if (result.sentViaGreenApi) {
+        // Sent directly via Green API
+        toast.success('הסיכום נשלח בהצלחה ב-WhatsApp!');
+      } else if (result.pdfUrl) {
+        // Fallback: opened wa.me with link
         toast.success('WhatsApp נפתח עם קישור לסיכום הביקור');
       } else {
+        // Fallback: opened wa.me, PDF downloaded locally
         toast.success('WhatsApp נפתח. ה-PDF הורד למחשב - צרפי אותו להודעה.');
       }
     } catch (error) {

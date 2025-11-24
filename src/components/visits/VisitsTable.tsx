@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Tables } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
-import { Edit, Trash2, FileText, Send, ChevronDown } from 'lucide-react';
+import { Edit, Trash2, FileText, Send } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
+import { VisitCard } from './VisitCard';
 
 type Visit = Tables<'visits'> & {
   clients?: Tables<'clients'> | null;
@@ -131,104 +132,8 @@ export const VisitsTable = ({ visits, onEdit, onDelete, onGeneratePdf, onSendWha
                   </Button>
                 </div>
 
-                {/* Visit Details */}
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    {visit.chief_complaint && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">תלונה עיקרית</h4>
-                        <p className="text-sm text-muted-foreground">{visit.chief_complaint}</p>
-                      </div>
-                    )}
-                    
-                    {visit.history && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">היסטוריה</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{visit.history}</p>
-                      </div>
-                    )}
-
-                    {visit.physical_exam && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">בדיקה גופנית</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{visit.physical_exam}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
-                    {visit.diagnoses && Array.isArray(visit.diagnoses) && visit.diagnoses.length > 0 && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">אבחנות</h4>
-                        <div className="space-y-2">
-                          {visit.diagnoses.map((diagnosis: any, idx: number) => (
-                            <div key={idx} className="text-sm bg-accent/50 rounded p-2">
-                              <p className="font-medium">{diagnosis.diagnosis}</p>
-                              {diagnosis.notes && (
-                                <p className="text-muted-foreground text-xs mt-1">{diagnosis.notes}</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {visit.treatments && Array.isArray(visit.treatments) && visit.treatments.length > 0 && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">טיפולים</h4>
-                        <div className="space-y-2">
-                          {visit.treatments.map((treatment: any, idx: number) => (
-                            <div key={idx} className="text-sm bg-accent/50 rounded p-2">
-                              <p className="font-medium">{treatment.treatment}</p>
-                              {treatment.notes && (
-                                <p className="text-muted-foreground text-xs mt-1">{treatment.notes}</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {visit.medications && Array.isArray(visit.medications) && visit.medications.length > 0 && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">תרופות</h4>
-                        <div className="space-y-2">
-                          {visit.medications.map((medication: any, idx: number) => (
-                            <div key={idx} className="text-sm bg-accent/50 rounded p-2">
-                              <p className="font-medium">{medication.medication}</p>
-                              <div className="text-muted-foreground text-xs mt-1 space-y-0.5">
-                                {medication.dosage && <p>מינון: {medication.dosage}</p>}
-                                {medication.frequency && <p>תדירות: {medication.frequency}</p>}
-                                {medication.duration && <p>משך: {medication.duration}</p>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Recommendations and Summary */}
-                {(visit.recommendations || visit.client_summary) && (
-                  <div className="space-y-4 pt-4 border-t">
-                    {visit.recommendations && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">המלצות</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{visit.recommendations}</p>
-                      </div>
-                    )}
-                    
-                    {visit.client_summary && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">סיכום ללקוח</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-primary/5 rounded p-3">
-                          {visit.client_summary}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Visit Details - using shared VisitCard component */}
+                <VisitCard visit={visit} />
               </div>
             </AccordionContent>
           </AccordionItem>

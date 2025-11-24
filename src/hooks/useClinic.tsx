@@ -1,33 +1,71 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { Tables } from '@/integrations/supabase/types';
+
+type Clinic = Tables<'clinics'>;
 
 export const useClinic = () => {
   const { user } = useAuth();
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const [clinic, setClinic] = useState<Clinic | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchClinicId = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+  const fetchClinicData = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
-      const { data, error } = await supabase
+    try {
+      // First get the clinic_id from profiles
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('clinic_id')
         .eq('id', user.id)
         .single();
 
-      if (!error && data) {
-        setClinicId(data.clinic_id);
+      if (profileError || !profileData?.clinic_id) {
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-    };
 
-    fetchClinicId();
+      setClinicId(profileData.clinic_id);
+
+      // Then fetch the full clinic data
+      const { data: clinicData, error: clinicError } = await supabase
+        .from('clinics')
+        .select('*')
+        .eq('id', profileData.clinic_id)
+        .single();
+
+      if (!clinicError && clinicData) {
+        setClinic(clinicData);
+      }
+    } catch (error) {
+      console.error('Error fetching clinic:', error);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
-  return { clinicId, loading };
+  useEffect(() => {
+    fetchClinicData();
+  }, [fetchClinicData]);
+
+  const refetchClinic = useCallback(async () => {
+    if (clinicId) {
+      const { data: clinicData, error: clinicError } = await supabase
+        .from('clinics')
+        .select('*')
+        .eq('id', clinicId)
+        .single();
+
+      if (!clinicError && clinicData) {
+        setClinic(clinicData);
+      }
+    }
+  }, [clinicId]);
+
+  return { clinicId, clinic, loading, refetchClinic };
 };

@@ -2,6 +2,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
 import { VisitSummaryData } from './visitSummaryTypes';
+import { sendWhatsAppMessage, WhatsAppConfig, formatPhoneNumber } from './whatsappService';
 
 export const generateVisitPdfFromElement = async (element: HTMLElement): Promise<Blob> => {
   // Create canvas from the HTML element
@@ -96,12 +97,38 @@ const createSafeFilename = (petName: string, visitDate: string): string => {
   return `visit-summary-${safePetName}-${safeDate}-${Date.now()}.pdf`;
 };
 
+// Get WhatsApp config from clinic settings
+const getWhatsAppConfig = async (clinicId: string): Promise<WhatsAppConfig | null> => {
+  try {
+    const { data: clinic } = await supabase
+      .from('clinics')
+      .select('settings')
+      .eq('id', clinicId)
+      .single();
+
+    if (clinic?.settings) {
+      const settings = clinic.settings as Record<string, any>;
+      const whatsapp = settings?.whatsapp;
+      if (whatsapp?.instanceId && whatsapp?.apiToken && whatsapp?.isEnabled) {
+        return {
+          instanceId: whatsapp.instanceId,
+          apiToken: whatsapp.apiToken,
+          isEnabled: whatsapp.isEnabled,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Error getting WhatsApp config:', error);
+  }
+  return null;
+};
+
 export const openWhatsAppWithPdfFromElement = async (
   element: HTMLElement,
   phoneNumber: string,
   data: VisitSummaryData,
   clinicId?: string
-): Promise<{ success: boolean; pdfUrl?: string }> => {
+): Promise<{ success: boolean; pdfUrl?: string; sentViaGreenApi?: boolean }> => {
   // Generate PDF blob
   const blob = await generateVisitPdfFromElement(element);
   // Use safe filename for storage (no Hebrew characters)
@@ -125,33 +152,59 @@ export const openWhatsAppWithPdfFromElement = async (
     await downloadVisitPdfFromElement(element, downloadFilename);
   }
 
-  // Clean phone number (remove spaces, dashes, etc.)
+  // Prepare WhatsApp message text
+  let messageText: string;
+  if (pdfUrl) {
+    messageText =
+      `שלום!\n\n` +
+      `מצורף סיכום הביקור של ${data.petName} מתאריך ${data.visitDate}:\n` +
+      `${pdfUrl}\n\n` +
+      `בברכה,\n${data.clinicName}`;
+  } else {
+    messageText =
+      `שלום!\n\n` +
+      `מצורף סיכום הביקור של ${data.petName} מתאריך ${data.visitDate}.\n\n` +
+      `בברכה,\n${data.clinicName}`;
+  }
+
+  // Try to send via Green API if configured
+  if (clinicId) {
+    const whatsappConfig = await getWhatsAppConfig(clinicId);
+
+    if (whatsappConfig) {
+      const result = await sendWhatsAppMessage(whatsappConfig, phoneNumber, messageText);
+
+      if (result.success) {
+        // Log the message to database
+        try {
+          await supabase.from('whatsapp_messages').insert({
+            clinic_id: clinicId,
+            content: messageText,
+            direction: 'outgoing',
+            provider_message_id: result.messageId || null,
+            sent_at: new Date().toISOString(),
+          });
+        } catch (error) {
+          console.error('Failed to log WhatsApp message:', error);
+        }
+
+        return { success: true, pdfUrl, sentViaGreenApi: true };
+      } else {
+        console.warn('Green API failed, falling back to wa.me:', result.error);
+      }
+    }
+  }
+
+  // Fallback: Open WhatsApp in browser
   const cleanPhone = phoneNumber.replace(/[\s\-\(\)]/g, '');
   const internationalPhone = cleanPhone.startsWith('0')
     ? '972' + cleanPhone.slice(1)
     : cleanPhone;
 
-  // Prepare WhatsApp message text
-  let messageText: string;
-  if (pdfUrl) {
-    messageText =
-      `שלום! 🐾\n\n` +
-      `מצורף סיכום הביקור של *${data.petName}* מתאריך ${data.visitDate}:\n` +
-      `${pdfUrl}\n\n` +
-      `בברכה,\n${data.clinicName}`;
-  } else {
-    messageText =
-      `שלום! 🐾\n\n` +
-      `מצורף סיכום הביקור של *${data.petName}* מתאריך ${data.visitDate}.\n\n` +
-      `בברכה,\n${data.clinicName}`;
-  }
-
   const message = encodeURIComponent(messageText);
-
-  // Open WhatsApp with the message
   window.open(`https://wa.me/${internationalPhone}?text=${message}`, '_blank');
 
-  return { success: true, pdfUrl };
+  return { success: true, pdfUrl, sentViaGreenApi: false };
 };
 
 // Legacy exports for backwards compatibility (if needed)
