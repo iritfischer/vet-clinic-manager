@@ -50,9 +50,10 @@ interface PetDialogProps {
   onClose: () => void;
   onSave: (data: any) => void;
   pet?: Pet | null;
+  defaultClientId?: string;
 }
 
-export const PetDialog = ({ open, onClose, onSave, pet }: PetDialogProps) => {
+export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDialogProps) => {
   const { clinicId } = useClinic();
   const [clients, setClients] = useState<Client[]>([]);
 
@@ -101,7 +102,7 @@ export const PetDialog = ({ open, onClose, onSave, pet }: PetDialogProps) => {
         name: '',
         species: '',
         breed: '',
-        client_id: '',
+        client_id: defaultClientId || '',
         birth_date: '',
         sex: '',
         color_markings: '',
@@ -112,7 +113,7 @@ export const PetDialog = ({ open, onClose, onSave, pet }: PetDialogProps) => {
         status: 'active',
       });
     }
-  }, [pet, reset]);
+  }, [pet, reset, defaultClientId]);
 
   const fetchClients = async () => {
     if (!clinicId) return;

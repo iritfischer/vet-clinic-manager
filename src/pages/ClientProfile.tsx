@@ -33,6 +33,7 @@ import { he } from 'date-fns/locale';
 import { VisitForm } from '@/components/visits/VisitForm';
 import { PetTimeline } from '@/components/clients/PetTimeline';
 import { ClientWhatsAppChat } from '@/components/clients/ClientWhatsAppChat';
+import { PetDialog } from '@/components/pets/PetDialog';
 import { useWhatsApp } from '@/hooks/useWhatsApp';
 import {
   Dialog,
@@ -82,6 +83,9 @@ const ClientProfile = () => {
   const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
   const [whatsappMessage, setWhatsappMessage] = useState('');
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+
+  // Pet dialog state
+  const [petDialogOpen, setPetDialogOpen] = useState(false);
 
   // סוגי חיסונים
   const VACCINATION_TYPES = {
@@ -463,6 +467,33 @@ const ClientProfile = () => {
     }
   };
 
+  // Handle adding a new pet
+  const handlePetSave = async (data: any) => {
+    if (!clinicId) return;
+
+    try {
+      const { error } = await supabase
+        .from('pets')
+        .insert({ ...data, clinic_id: clinicId });
+
+      if (error) throw error;
+
+      toast({
+        title: 'הצלחה',
+        description: 'חיית המחמד נוספה בהצלחה',
+      });
+
+      setPetDialogOpen(false);
+      fetchClientData();
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
   // WhatsApp send function
   const handleSendWhatsApp = async () => {
     if (!client || !whatsappMessage.trim()) return;
@@ -726,7 +757,7 @@ const ClientProfile = () => {
               <Card>
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground mb-4">אין חיות מחמד רשומות ללקוח זה</p>
-                  <Button onClick={() => navigate(`/pets?client=${client.id}`)}>
+                  <Button onClick={() => setPetDialogOpen(true)}>
                     <Plus className="h-4 w-4 ml-2" />
                     הוסף חיית מחמד
                   </Button>
@@ -736,8 +767,8 @@ const ClientProfile = () => {
               <Tabs defaultValue={pets[0]?.id} className="w-full">
                 <TabsList className="w-full h-auto gap-4 bg-transparent border-0 mb-6 flex flex-row-reverse justify-start">
                   {pets.map((pet) => (
-                    <TabsTrigger 
-                      key={pet.id} 
+                    <TabsTrigger
+                      key={pet.id}
                       value={pet.id}
                       className="flex flex-col items-center gap-2 data-[state=active]:bg-transparent p-0 border-0 bg-transparent"
                     >
@@ -746,8 +777,8 @@ const ClientProfile = () => {
                           {pet.name.charAt(0)}
                         </div>
                         {visitsByPet[pet.id]?.length > 0 && (
-                          <Badge 
-                            variant="secondary" 
+                          <Badge
+                            variant="secondary"
                             className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full"
                           >
                             {visitsByPet[pet.id].length}
@@ -757,6 +788,18 @@ const ClientProfile = () => {
                       <span className="text-sm font-medium">{pet.name}</span>
                     </TabsTrigger>
                   ))}
+                  {/* Add pet button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex flex-col items-center gap-2 h-auto py-2 px-4 border-dashed"
+                    onClick={() => setPetDialogOpen(true)}
+                  >
+                    <div className="w-16 h-16 rounded-full border-2 border-dashed border-muted-foreground/50 flex items-center justify-center">
+                      <Plus className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <span className="text-sm font-medium text-muted-foreground">הוסף חיה</span>
+                  </Button>
                 </TabsList>
 
                 {pets.map((pet) => (
@@ -1616,6 +1659,14 @@ const ClientProfile = () => {
           </div>
         </div>
       </div>
+
+      {/* Pet Dialog */}
+      <PetDialog
+        open={petDialogOpen}
+        onClose={() => setPetDialogOpen(false)}
+        onSave={handlePetSave}
+        defaultClientId={client.id}
+      />
     </DashboardLayout>
   );
 };
