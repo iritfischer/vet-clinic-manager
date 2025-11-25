@@ -24,9 +24,6 @@ import {
 import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
 import { VisitWithRelations } from '@/lib/visitSummaryTypes';
 
-type Visit = Tables<'visits'>;
-type Reminder = Tables<'reminders'>;
-
 interface TimelineEvent {
   id: string;
   type: 'visit' | 'reminder_completed';
@@ -79,7 +76,7 @@ const formatVisitType = (visitType: string): string => {
   return visitTypeLabels[visitType] || visitType;
 };
 
-export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onEditVisit, onExportPDF }: PetTimelineProps) => {
+export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportPDF }: PetTimelineProps) => {
   const { clinicId } = useClinic();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);

@@ -27,13 +27,15 @@ interface WeekViewProps {
   onUpdateAppointment?: (appointmentId: string, startTime: Date, endTime: Date) => void;
 }
 
-const statusConfig: Record<string, { label: string; variant: string; color: string }> = {
+// Status config is defined for potential future use
+const _statusConfig: Record<string, { label: string; variant: string; color: string }> = {
   scheduled: { label: 'מתוזמן', variant: 'default', color: 'bg-blue-500' },
   confirmed: { label: 'מאושר', variant: 'default', color: 'bg-green-500' },
   cancelled: { label: 'בוטל', variant: 'destructive', color: 'bg-red-500' },
   completed: { label: 'הושלם', variant: 'secondary', color: 'bg-gray-500' },
   no_show: { label: 'לא הגיע', variant: 'outline', color: 'bg-yellow-600' },
 };
+void _statusConfig; // Silence unused warning
 
 const appointmentTypeColors: Record<string, string> = {
   'חיסון': 'bg-purple-500',
@@ -47,14 +49,15 @@ const appointmentTypeColors: Record<string, string> = {
 
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 6); // 6 AM to 8 PM
 
-export function WeekView({ 
-  appointments, 
-  onAppointmentClick, 
+export function WeekView({
+  appointments,
+  onAppointmentClick: _onAppointmentClick,
   onCreateAppointment,
   onNavigateToClient,
   onEditAppointment,
   onUpdateAppointment
 }: WeekViewProps) {
+  void _onAppointmentClick; // Reserved for future use
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [dragState, setDragState] = useState<{
     isDragging: boolean;

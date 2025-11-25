@@ -29,7 +29,7 @@ interface ClientWhatsAppChatProps {
 export const ClientWhatsAppChat = ({ clientId, clientName, clientPhone }: ClientWhatsAppChatProps) => {
   const { clinicId } = useClinic();
   const { sendMessage, isEnabled, isConfigured, isAuthorized } = useWhatsApp();
-  const { toast } = useToast();
+  useToast(); // Hook needed for future error handling
 
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +87,7 @@ export const ClientWhatsAppChat = ({ clientId, clientName, clientPhone }: Client
         new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
       );
 
-      setMessages(uniqueMessages);
+      setMessages(uniqueMessages as WhatsAppMessage[]);
     } catch (error: any) {
       console.error('Error fetching messages:', error);
     } finally {

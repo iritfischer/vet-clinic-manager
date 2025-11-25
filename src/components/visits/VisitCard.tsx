@@ -191,10 +191,6 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardP
     });
   };
 
-  // Get selected client and pet names for display
-  const selectedClient = clients.find(c => c.id === watch('client_id'));
-  const selectedPet = pets.find(p => p.id === watch('pet_id'));
-
   // View Mode
   if (mode === 'view' && visit) {
     return (

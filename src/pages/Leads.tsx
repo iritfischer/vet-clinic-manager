@@ -134,7 +134,7 @@ const Leads = () => {
     }
   };
 
-  const handleGoToWhatsApp = (lead: Lead) => {
+  const handleGoToWhatsApp = (_lead: Lead) => {
     navigate('/whatsapp');
   };
 

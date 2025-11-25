@@ -7,21 +7,27 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Settings as SettingsIcon,
   MessageCircle,
   CheckCircle,
   XCircle,
   RefreshCw,
+  Shield,
+  Smartphone,
+  Loader2,
 } from 'lucide-react';
 import { useWhatsApp } from '@/hooks/useWhatsApp';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { setWebhookUrl, getWebhookSettings, WhatsAppConfig } from '@/lib/whatsappService';
+import { setWebhookUrl, getWebhookSettings } from '@/lib/whatsappService';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
 const Settings = () => {
   const { toast } = useToast();
+  const { enrollMFA, verifyMFA, unenrollMFA, getMFAFactors } = useAuth();
   const {
     settings,
     loading,
@@ -41,6 +47,89 @@ const Settings = () => {
   const [settingWebhook, setSettingWebhook] = useState(false);
   const [webhookStatus, setWebhookStatus] = useState<string | null>(null);
   const [allSettings, setAllSettings] = useState<any>(null);
+
+  // MFA state
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [showMFASetup, setShowMFASetup] = useState(false);
+  const [mfaQrCode, setMfaQrCode] = useState<string | null>(null);
+  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+  const [mfaSetupFactorId, setMfaSetupFactorId] = useState<string | null>(null);
+  const [mfaVerifyCode, setMfaVerifyCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+
+  // Load MFA status
+  useEffect(() => {
+    const loadMFAStatus = async () => {
+      const { factors } = await getMFAFactors();
+      if (factors && factors.length > 0) {
+        setMfaEnabled(true);
+        setMfaFactorId(factors[0].id);
+      }
+    };
+    loadMFAStatus();
+  }, []);
+
+  const handleEnableMFA = async () => {
+    setMfaLoading(true);
+    try {
+      const { data, error } = await enrollMFA();
+      if (error) {
+        toast({ title: 'שגיאה', description: error.message, variant: 'destructive' });
+        return;
+      }
+      if (data) {
+        setMfaQrCode(data.totp.qr_code);
+        setMfaSecret(data.totp.secret);
+        setMfaSetupFactorId(data.id);
+        setShowMFASetup(true);
+      }
+    } catch (error: any) {
+      toast({ title: 'שגיאה', description: error.message, variant: 'destructive' });
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleVerifyMFASetup = async () => {
+    if (!mfaSetupFactorId || mfaVerifyCode.length !== 6) return;
+    setMfaLoading(true);
+    try {
+      const { error } = await verifyMFA(mfaSetupFactorId, mfaVerifyCode);
+      if (error) {
+        toast({ title: 'שגיאה', description: 'קוד אימות שגוי', variant: 'destructive' });
+        return;
+      }
+      setMfaEnabled(true);
+      setMfaFactorId(mfaSetupFactorId);
+      setShowMFASetup(false);
+      setMfaVerifyCode('');
+      toast({ title: 'הצלחה', description: 'אימות דו-שלבי הופעל בהצלחה!' });
+    } catch (error: any) {
+      toast({ title: 'שגיאה', description: error.message, variant: 'destructive' });
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleDisableMFA = async () => {
+    if (!mfaFactorId) return;
+    setMfaLoading(true);
+    try {
+      const { error } = await unenrollMFA(mfaFactorId);
+      if (error) {
+        toast({ title: 'שגיאה', description: error.message, variant: 'destructive' });
+        return;
+      }
+      setMfaEnabled(false);
+      setMfaFactorId(null);
+      toast({ title: 'הצלחה', description: 'אימות דו-שלבי בוטל' });
+    } catch (error: any) {
+      toast({ title: 'שגיאה', description: error.message, variant: 'destructive' });
+    } finally {
+      setMfaLoading(false);
+    }
+  };
 
   // Load settings into form
   useEffect(() => {
@@ -376,6 +465,67 @@ const Settings = () => {
           </CardContent>
         </Card>
 
+        {/* Security Settings Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Shield className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <CardTitle>אבטחת חשבון</CardTitle>
+                <CardDescription>
+                  הגדרות אבטחה נוספות להגנה על החשבון שלך
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* MFA Toggle */}
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Smartphone className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <Label className="text-base">אימות דו-שלבי (2FA)</Label>
+                  <p className="text-sm text-muted-foreground">
+                    הוסף שכבת אבטחה נוספת עם אפליקציית אימות
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {mfaEnabled && (
+                  <Badge variant="default">
+                    <CheckCircle className="h-3 w-3 ml-1" />
+                    פעיל
+                  </Badge>
+                )}
+                <Button
+                  variant={mfaEnabled ? 'destructive' : 'default'}
+                  size="sm"
+                  onClick={mfaEnabled ? handleDisableMFA : handleEnableMFA}
+                  disabled={mfaLoading}
+                >
+                  {mfaLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : mfaEnabled ? (
+                    'בטל'
+                  ) : (
+                    'הפעל'
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Session info */}
+            <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+              <h4 className="font-medium">מידע על הפעלה</h4>
+              <p className="text-sm text-muted-foreground">
+                ההתחברות שלך תפוג אוטומטית לאחר 8 שעות של חוסר פעילות
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Placeholder for future settings */}
         <Card className="opacity-50">
           <CardHeader>
@@ -386,6 +536,62 @@ const Settings = () => {
           </CardHeader>
         </Card>
       </div>
+
+      {/* MFA Setup Dialog */}
+      <Dialog open={showMFASetup} onOpenChange={setShowMFASetup}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>הגדרת אימות דו-שלבי</DialogTitle>
+            <DialogDescription>
+              סרוק את קוד ה-QR באפליקציית האימות שלך (Google Authenticator, Authy וכו')
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {mfaQrCode && (
+              <div className="flex justify-center p-4 bg-white rounded-lg">
+                <img src={mfaQrCode} alt="QR Code" className="w-48 h-48" />
+              </div>
+            )}
+            {mfaSecret && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">לא יכול לסרוק? הזן ידנית:</p>
+                <code className="text-sm font-mono break-all">{mfaSecret}</code>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="mfa-setup-code">הזן את הקוד מהאפליקציה</Label>
+              <Input
+                id="mfa-setup-code"
+                type="text"
+                placeholder="000000"
+                value={mfaVerifyCode}
+                onChange={(e) => setMfaVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                dir="ltr"
+                className="text-center text-2xl tracking-widest"
+                maxLength={6}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={handleVerifyMFASetup}
+                disabled={mfaLoading || mfaVerifyCode.length !== 6}
+              >
+                {mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'אמת והפעל'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowMFASetup(false);
+                  setMfaVerifyCode('');
+                }}
+              >
+                ביטול
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };

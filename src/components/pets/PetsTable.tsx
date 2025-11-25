@@ -21,8 +21,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
 
 type Pet = Tables<'pets'> & {
   clients?: Tables<'clients'> | null;

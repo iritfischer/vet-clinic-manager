@@ -168,7 +168,7 @@ const Appointments = () => {
     setEditingAppointment(null);
   };
 
-  const handleAppointmentClick = (appointment: Appointment) => {
+  const handleAppointmentClick = (_appointment: Appointment) => {
     // Single click does nothing - context menu handles actions
   };
 

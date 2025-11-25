@@ -113,7 +113,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(preSelectedClientId || '');
 
-  const { register, handleSubmit, reset, watch, setValue, control, formState: { errors } } = useForm<VisitFormData>({
+  const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<VisitFormData>({
     resolver: zodResolver(visitSchema),
     defaultValues: {
       client_id: preSelectedClientId || '',

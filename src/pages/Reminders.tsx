@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Check, X, Phone, Calendar, Bell, MessageCircle, Send } from 'lucide-react';
+import { Loader2, Check, Bell, MessageCircle } from 'lucide-react';
 import { format, isToday, isTomorrow, isPast, addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { useWhatsApp } from '@/hooks/useWhatsApp';

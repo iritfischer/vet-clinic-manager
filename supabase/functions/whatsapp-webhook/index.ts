@@ -8,12 +8,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting: track requests per IP
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 100;
+
+const checkRateLimit = (ip: string): boolean => {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+
+  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+    return false;
+  }
+
+  record.count++;
+  return true;
+};
+
 // Format phone number: remove @c.us suffix and country code prefix for matching
 const normalizePhone = (phone: string): string => {
   let cleaned = phone.replace('@c.us', '').replace('@s.whatsapp.net', '');
-  // Remove leading zeros and country code variations
   cleaned = cleaned.replace(/\D/g, '');
-  // If starts with 972, keep last 9 digits for Israeli numbers
   if (cleaned.startsWith('972')) {
     cleaned = '0' + cleaned.substring(3);
   }
@@ -26,18 +46,27 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Rate limiting check
+  const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                   req.headers.get('x-real-ip') ||
+                   'unknown';
+
+  if (!checkRateLimit(clientIP)) {
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded. Try again later.' }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    console.log('=== WEBHOOK RECEIVED ===');
-    console.log('Full body:', JSON.stringify(body, null, 2));
-    console.log('typeWebhook:', body.typeWebhook);
-    console.log('instanceData:', JSON.stringify(body.instanceData));
-    console.log('senderData:', JSON.stringify(body.senderData));
-    console.log('messageData:', JSON.stringify(body.messageData));
+
+    // Minimal logging - no sensitive data
+    console.log('Webhook received:', body.typeWebhook, 'from instance:', body.instanceData?.idInstance);
 
     // Green API sends different types of webhooks
     // We're interested in incoming messages
@@ -79,21 +108,14 @@ Deno.serve(async (req) => {
     // Find clinic with matching WhatsApp instance ID
     let clinicId: string | null = null;
     const instanceIdStr = String(instanceId);
-    console.log('Looking for clinic with instanceId:', instanceIdStr, 'type:', typeof instanceId);
-    console.log('Found clinics with settings:', clinics?.length || 0);
 
-    // Log all clinic settings for debugging
     for (const clinic of clinics || []) {
       const settings = clinic.settings as Record<string, any>;
       const clinicInstanceId = settings?.whatsapp?.instanceId;
-      console.log('Clinic', clinic.id, 'whatsapp settings:', JSON.stringify(settings?.whatsapp));
-      console.log('  - clinicInstanceId:', clinicInstanceId, 'type:', typeof clinicInstanceId);
-      console.log('  - comparing:', String(clinicInstanceId), '===', instanceIdStr, '?', String(clinicInstanceId) === instanceIdStr);
 
       // Compare as strings (handle both string and number storage)
       if (clinicInstanceId && String(clinicInstanceId) === instanceIdStr) {
         clinicId = clinic.id;
-        console.log('Found matching clinic:', clinicId);
         break;
       }
     }
@@ -105,7 +127,6 @@ Deno.serve(async (req) => {
         const settings = clinic.settings as Record<string, any>;
         if (settings?.whatsapp?.isEnabled) {
           clinicId = clinic.id;
-          console.log('Using first enabled WhatsApp clinic as fallback:', clinicId);
           break;
         }
       }
@@ -115,7 +136,6 @@ Deno.serve(async (req) => {
           const settings = clinic.settings as Record<string, any>;
           if (settings?.whatsapp) {
             clinicId = clinic.id;
-            console.log('Using first clinic with WhatsApp config as fallback:', clinicId);
             break;
           }
         }
@@ -123,17 +143,12 @@ Deno.serve(async (req) => {
       // Last resort - just use the first clinic
       if (!clinicId && clinics.length > 0) {
         clinicId = clinics[0].id;
-        console.log('Using first available clinic as last resort fallback:', clinicId);
       }
     }
 
     if (!clinicId) {
-      console.log('No clinic found for instance:', instanceIdStr);
-      return new Response(JSON.stringify({
-        status: 'no clinic found',
-        searchedFor: instanceIdStr,
-        clinicsChecked: clinics?.length || 0
-      }), {
+      console.log('No clinic found for instance');
+      return new Response(JSON.stringify({ status: 'no clinic found' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -144,14 +159,6 @@ Deno.serve(async (req) => {
     const phoneWithZero = '0' + phoneLast9;
     const phoneWith972 = '972' + phoneLast9;
 
-    console.log('Searching for client with phone variants:', {
-      senderPhone,
-      normalizedPhone,
-      phoneLast9,
-      phoneWithZero,
-      phoneWith972
-    });
-
     // Try multiple phone formats to find the client
     const { data: clients, error: clientsError } = await supabase
       .from('clients')
@@ -160,52 +167,33 @@ Deno.serve(async (req) => {
       .or(`phone_primary.ilike.%${phoneLast9},phone_secondary.ilike.%${phoneLast9},phone_primary.eq.${phoneWithZero},phone_secondary.eq.${phoneWithZero},phone_primary.eq.${phoneWith972},phone_secondary.eq.${phoneWith972}`);
 
     if (clientsError) {
-      console.error('Error fetching clients:', clientsError);
-    }
-
-    console.log('Clients found:', clients?.length || 0);
-    if (clients && clients.length > 0) {
-      console.log('First matching client:', clients[0]);
-    } else {
-      console.log('No client found for phone. Will save message without client_id.');
+      console.error('Error fetching clients');
     }
 
     const client = clients?.[0];
 
-    // Save the incoming message - include sender_phone!
+    // Save the incoming message
     const messageToInsert: Record<string, any> = {
       clinic_id: clinicId,
       client_id: client?.id || null,
       content: messageText,
       direction: 'inbound',
       provider_message_id: messageId,
-      sender_phone: senderPhone, // This is critical for grouping conversations!
+      sender_phone: senderPhone,
       sent_at: timestamp ? new Date(timestamp * 1000).toISOString() : new Date().toISOString(),
     };
 
-    console.log('Inserting message:', messageToInsert);
-    console.log('Client found:', client ? client.id : 'none');
-
-    const { data: insertedData, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('whatsapp_messages')
-      .insert(messageToInsert)
-      .select();
+      .insert(messageToInsert);
 
     if (insertError) {
-      console.error('Error saving message:', insertError);
-      console.error('Insert error details:', JSON.stringify(insertError));
+      console.error('Error saving message');
       throw insertError;
     }
 
-    console.log('Message saved successfully:', insertedData);
-    console.log('For client:', client?.id || 'unknown');
-
     return new Response(
-      JSON.stringify({
-        status: 'success',
-        clientId: client?.id,
-        clinicId,
-      }),
+      JSON.stringify({ status: 'success' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

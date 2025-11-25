@@ -6,17 +6,29 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Activity, Loader2 } from 'lucide-react';
+import { Activity, Loader2, ArrowRight } from 'lucide-react';
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, resetPasswordRequest, challengeMFA, user } = useAuth();
   const [loading, setLoading] = useState(false);
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+
+  // Forgot password state
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  // MFA state
+  const [showMFA, setShowMFA] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
 
   // Signup form state
   const [signupEmail, setSignupEmail] = useState('');
@@ -37,7 +49,7 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { error } = await signIn(loginEmail, loginPassword);
+      const { error, mfaRequired, factorId } = await signIn(loginEmail, loginPassword);
 
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
@@ -45,6 +57,10 @@ const Auth = () => {
         } else {
           toast.error(error.message);
         }
+      } else if (mfaRequired && factorId) {
+        // Show MFA dialog
+        setMfaFactorId(factorId);
+        setShowMFA(true);
       } else {
         toast.success('התחברת בהצלחה!');
       }
@@ -52,6 +68,46 @@ const Auth = () => {
       toast.error('אירעה שגיאה בהתחברות');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+
+    try {
+      const { error } = await resetPasswordRequest(forgotEmail);
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success('נשלח אליך מייל לאיפוס הסיסמה');
+        setShowForgotPassword(false);
+        setForgotEmail('');
+      }
+    } catch (error) {
+      toast.error('אירעה שגיאה בשליחת המייל');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleMFAVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMfaLoading(true);
+
+    try {
+      const { error } = await challengeMFA(mfaFactorId, mfaCode);
+      if (error) {
+        toast.error('קוד אימות שגוי');
+      } else {
+        toast.success('התחברת בהצלחה!');
+        setShowMFA(false);
+        setMfaCode('');
+      }
+    } catch (error) {
+      toast.error('אירעה שגיאה באימות');
+    } finally {
+      setMfaLoading(false);
     }
   };
 
@@ -152,6 +208,17 @@ const Auth = () => {
                     ) : (
                       'התחבר'
                     )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="w-full text-sm text-muted-foreground"
+                    onClick={() => {
+                      setForgotEmail(loginEmail);
+                      setShowForgotPassword(true);
+                    }}
+                  >
+                    שכחתי סיסמה
                   </Button>
                 </form>
               </TabsContent>
@@ -261,6 +328,110 @@ const Auth = () => {
           על ידי הרשמה, אתה מסכים לתנאי השימוש ומדיניות הפרטיות
         </p>
       </div>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>איפוס סיסמה</DialogTitle>
+            <DialogDescription>
+              הזן את כתובת האימייל שלך ונשלח לך קישור לאיפוס הסיסמה
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="forgot-email">אימייל</Label>
+              <Input
+                id="forgot-email"
+                type="email"
+                placeholder="your@email.com"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                required
+                disabled={forgotLoading}
+                dir="ltr"
+                className="text-left"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" className="flex-1" disabled={forgotLoading}>
+                {forgotLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    שולח...
+                  </>
+                ) : (
+                  'שלח קישור לאיפוס'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForgotPassword(false)}
+                disabled={forgotLoading}
+              >
+                ביטול
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MFA Verification Dialog */}
+      <Dialog open={showMFA} onOpenChange={setShowMFA}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>אימות דו-שלבי</DialogTitle>
+            <DialogDescription>
+              הזן את הקוד מאפליקציית האימות שלך
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleMFAVerify} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="mfa-code">קוד אימות</Label>
+              <Input
+                id="mfa-code"
+                type="text"
+                placeholder="000000"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                required
+                disabled={mfaLoading}
+                dir="ltr"
+                className="text-center text-2xl tracking-widest"
+                maxLength={6}
+                autoComplete="one-time-code"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" className="flex-1" disabled={mfaLoading || mfaCode.length !== 6}>
+                {mfaLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    מאמת...
+                  </>
+                ) : (
+                  <>
+                    אמת
+                    <ArrowRight className="mr-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowMFA(false);
+                  setMfaCode('');
+                }}
+                disabled={mfaLoading}
+              >
+                ביטול
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

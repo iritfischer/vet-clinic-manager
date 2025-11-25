@@ -43,7 +43,7 @@ export const useGreenApiConversations = () => {
         .select('id, first_name, last_name, phone_primary, phone_secondary, email')
         .eq('clinic_id', clinicId)
         .eq('status', 'active');
-      setClients(data || []);
+      setClients((data || []) as Client[]);
     } catch (error) {
       console.error('Error fetching clients:', error);
     }
@@ -155,7 +155,7 @@ export const useGreenApiConversations = () => {
     });
 
     // Build conversation objects
-    const result: Conversation[] = Array.from(conversationMap.values()).map(conv => {
+    const result = Array.from(conversationMap.values()).map(conv => {
       const normalizedPhone = normalizePhone(conv.phone);
 
       // Find client or lead
@@ -188,12 +188,12 @@ export const useGreenApiConversations = () => {
         clinic_id: clinicId || '',
         client_id: client?.id || null,
         lead_id: lead?.id || null,
-        message_id: msg.idMessage,
-        direction: msg.type === 'incoming' ? 'incoming' as const : 'outgoing' as const,
+        provider_message_id: msg.idMessage,
+        appointment_id: null,
+        reminder_id: null,
+        direction: msg.type === 'incoming' ? 'incoming' : 'outgoing',
         content: msg.textMessage || msg.extendedTextMessageData?.text || msg.caption || '',
-        sender_phone: msg.type === 'incoming' ? conv.phone : undefined,
-        sender_name: msg.senderName,
-        status: 'delivered',
+        sender_phone: msg.type === 'incoming' ? conv.phone : null,
         sent_at: new Date(msg.timestamp * 1000).toISOString(),
         created_at: new Date(msg.timestamp * 1000).toISOString(),
       }));
@@ -259,9 +259,9 @@ export const useGreenApiConversations = () => {
   // Refresh function
   const refresh = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchClients(), fetchLeads(), fetchChats()]);
+    await Promise.all([fetchClients(), fetchLeads(), fetchMessages()]);
     setLoading(false);
-  }, [fetchClients, fetchLeads, fetchChats]);
+  }, [fetchClients, fetchLeads, fetchMessages]);
 
   return {
     conversations: filteredConversations,

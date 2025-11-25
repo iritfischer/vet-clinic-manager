@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { Conversation, ConversationFilter, WhatsAppMessage, Client, Lead } from '@/types/leads';
-import { formatPhoneNumber } from '@/lib/whatsappService';
 
 interface RawMessage extends WhatsAppMessage {
   clients?: Client | null;
@@ -50,8 +49,8 @@ export const useConversations = () => {
         .order('sent_at', { ascending: false });
 
       if (error) throw error;
-      setMessages(data || []);
-    } catch (error: any) {
+      setMessages((data || []) as RawMessage[]);
+    } catch (error: unknown) {
       console.error('Error fetching messages:', error);
     }
   }, [clinicId]);
@@ -68,7 +67,7 @@ export const useConversations = () => {
         .eq('status', 'active');
 
       if (error) throw error;
-      setClients(data || []);
+      setClients((data || []) as Client[]);
     } catch (error: any) {
       console.error('Error fetching clients:', error);
     }
@@ -273,7 +272,7 @@ export const useConversations = () => {
       result = result.filter(conv =>
         conv.name.toLowerCase().includes(query) ||
         conv.phone.includes(query) ||
-        normalizePhone(conv.phone).includes(query.replace(/\D/g, ''))
+        normalizePhone(conv.phone).includes(normalizePhone(query))
       );
     }
 

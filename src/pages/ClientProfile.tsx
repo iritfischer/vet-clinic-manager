@@ -6,16 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, Download, TrendingUp, Syringe, X, MessageCircle } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowRight, Phone, Mail, MapPin, Edit, Plus, Calendar, Stethoscope, FileText, TrendingUp, Syringe, X, MessageCircle } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -44,6 +35,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type Client = Tables<'clients'>;
 type Pet = Tables<'pets'>;
@@ -54,7 +48,7 @@ type Visit = Tables<'visits'> & {
 const ClientProfile = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { clinicId, clinic } = useClinic();
+  const { clinicId } = useClinic();
   const { toast } = useToast();
   const { sendMessage, isEnabled: whatsappEnabled, isConfigured: whatsappConfigured } = useWhatsApp();
   const [client, setClient] = useState<Client | null>(null);
@@ -121,7 +115,7 @@ const ClientProfile = () => {
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('*')
-        .eq('id', clientId)
+        .eq('id', clientId as string)
         .single();
 
       if (clientError) throw clientError;
@@ -131,7 +125,7 @@ const ClientProfile = () => {
       const { data: petsData, error: petsError } = await supabase
         .from('pets')
         .select('*')
-        .eq('client_id', clientId)
+        .eq('client_id', clientId as string)
         .eq('status', 'active')
         .order('name', { ascending: true });
 
@@ -143,7 +137,7 @@ const ClientProfile = () => {
         const { data: visitsData, error: visitsError } = await supabase
           .from('visits')
           .select('*, pets:pet_id(*)')
-          .eq('client_id', clientId)
+          .eq('client_id', clientId as string)
           .order('visit_date', { ascending: false });
 
         if (visitsError) throw visitsError;
@@ -175,7 +169,7 @@ const ClientProfile = () => {
     try {
       if (!clinicId) return;
 
-      // Extract follow_ups and price_items separately
+      // Extract follow_ups and price_items
       const follow_ups = visitData._follow_ups || visitData.follow_ups;
       const price_items = visitData._price_items || visitData.price_items;
 
@@ -292,8 +286,8 @@ const ClientProfile = () => {
     try {
       if (!clinicId || !editingVisit) return;
 
-      // Extract follow_ups and price_items separately
-      const follow_ups = visitData._follow_ups || visitData.follow_ups;
+      // Extract price_items (follow_ups reserved for future use)
+      void (visitData._follow_ups || visitData.follow_ups);
       const price_items = visitData._price_items || visitData.price_items;
 
       // Build clean object with only valid visits table columns
@@ -491,15 +485,15 @@ const ClientProfile = () => {
       // המר תאריך לפורמט datetime
       const visitDateTime = `${vaccinationForm.vaccination_date}T12:00:00`;
 
-      const { data: visitData, error: visitError } = await supabase
+      const { error: visitError } = await supabase
         .from('visits')
         .insert({
-          clinic_id: clinicId,
+          clinic_id: clinicId!,
           client_id: client.id,
           pet_id: petId,
           visit_type: visitType,
           visit_date: visitDateTime,
-          status: 'closed',
+          status: 'completed',
         })
         .select()
         .single();
@@ -518,13 +512,13 @@ const ClientProfile = () => {
         const { error: reminderError } = await supabase
           .from('reminders')
           .insert({
-            clinic_id: clinicId,
+            clinic_id: clinicId!,
             client_id: client.id,
             pet_id: petId,
             reminder_type: 'vaccination',
             due_date: nextDueDate.toISOString().slice(0, 10),
             notes: `חיסון ${selectedVaccine.label}`,
-            status: 'open',
+            status: 'pending',
           });
 
         if (reminderError) throw reminderError;
@@ -611,7 +605,7 @@ const ClientProfile = () => {
     return sorted[0];
   };
 
-  const getWeightChartData = (pet: Pet) => {
+  const getWeightChartData = (pet: Pet): { date: string; weight: number }[] => {
     const metricsHistory = (pet.metrics_history as any[]) || [];
     // Filter only entries with weight and valid date, sort by date ascending for chart
     return metricsHistory
@@ -625,12 +619,6 @@ const ClientProfile = () => {
         date: format(new Date(m.date), 'dd/MM/yy', { locale: he }),
         weight: m.weight
       }));
-  };
-
-  const statusConfig = {
-    open: { label: 'פתוח', variant: 'default' as const },
-    completed: { label: 'הושלם', variant: 'secondary' as const },
-    cancelled: { label: 'בוטל', variant: 'destructive' as const },
   };
 
   if (loading || !client) {
@@ -1256,7 +1244,6 @@ const ClientProfile = () => {
                                         width={chartWidth}
                                         height={chartHeight + 40}
                                         className="mx-auto"
-                                        dir="ltr"
                                       >
                                         {/* Grid lines */}
                                         {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => (

@@ -2,7 +2,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
 import { VisitSummaryData } from './visitSummaryTypes';
-import { sendWhatsAppMessage, WhatsAppConfig, formatPhoneNumber } from './whatsappService';
+import { sendWhatsAppMessage, WhatsAppConfig } from './whatsappService';
 
 export const generateVisitPdfFromElement = async (element: HTMLElement): Promise<Blob> => {
   // Create canvas from the HTML element
@@ -70,7 +70,7 @@ export const uploadPdfToStorage = async (
   const filePath = `visit-summaries/${clinicId}/${filename}`;
 
   // Upload to Supabase Storage
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from('sum')
     .upload(filePath, blob, {
       contentType: 'application/pdf',
