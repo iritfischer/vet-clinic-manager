@@ -146,16 +146,16 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
         <DialogHeader>
           <DialogTitle className="text-right">
             {pet ? 'עריכת חיית מחמד' : 'הוספת חיית מחמד חדשה'}
           </DialogTitle>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit(onSubmit)}>
-          <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+          <Tabs defaultValue="basic" className="w-full" dir="rtl">
+            <TabsList className="grid w-full grid-cols-3" dir="rtl">
               <TabsTrigger value="basic">פרטים בסיסיים</TabsTrigger>
               <TabsTrigger value="health">פרטי בריאות</TabsTrigger>
               <TabsTrigger value="identification">זיהוי ורישוי</TabsTrigger>
@@ -180,13 +180,14 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                   <Select
                     value={watch('client_id') || ''}
                     onValueChange={(value) => setValue('client_id', value, { shouldValidate: true })}
+                    dir="rtl"
                   >
                     <SelectTrigger className="text-right">
                       <SelectValue placeholder="בחר בעלים" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent dir="rtl">
                       {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
+                        <SelectItem key={client.id} value={client.id} className="text-right">
                           {client.first_name} {client.last_name}
                         </SelectItem>
                       ))}
@@ -204,17 +205,18 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                   <Select
                     value={watch('species')}
                     onValueChange={(value) => setValue('species', value, { shouldValidate: true })}
+                    dir="rtl"
                   >
                     <SelectTrigger className="text-right">
                       <SelectValue placeholder="בחר סוג" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dog">כלב</SelectItem>
-                      <SelectItem value="cat">חתול</SelectItem>
-                      <SelectItem value="bird">ציפור</SelectItem>
-                      <SelectItem value="rabbit">ארנב</SelectItem>
-                      <SelectItem value="hamster">אוגר</SelectItem>
-                      <SelectItem value="other">אחר</SelectItem>
+                    <SelectContent dir="rtl">
+                      <SelectItem value="dog" className="text-right">כלב</SelectItem>
+                      <SelectItem value="cat" className="text-right">חתול</SelectItem>
+                      <SelectItem value="bird" className="text-right">ציפור</SelectItem>
+                      <SelectItem value="rabbit" className="text-right">ארנב</SelectItem>
+                      <SelectItem value="hamster" className="text-right">אוגר</SelectItem>
+                      <SelectItem value="other" className="text-right">אחר</SelectItem>
                     </SelectContent>
                   </Select>
                   {errors.species && (
@@ -248,14 +250,15 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                   <Select
                     value={watch('sex') || 'none'}
                     onValueChange={(value) => setValue('sex', value === 'none' ? '' : value)}
+                    dir="rtl"
                   >
                     <SelectTrigger className="text-right">
                       <SelectValue placeholder="בחר מין" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">לא ידוע</SelectItem>
-                      <SelectItem value="male">זכר</SelectItem>
-                      <SelectItem value="female">נקבה</SelectItem>
+                    <SelectContent dir="rtl">
+                      <SelectItem value="none" className="text-right">לא ידוע</SelectItem>
+                      <SelectItem value="male" className="text-right">זכר</SelectItem>
+                      <SelectItem value="female" className="text-right">נקבה</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -271,7 +274,7 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-row-reverse">
                 <Label htmlFor="status">סטטוס פעיל</Label>
                 <Switch
                   id="status"
@@ -299,14 +302,15 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                 <Select
                   value={watch('neuter_status') || 'none'}
                   onValueChange={(value) => setValue('neuter_status', value === 'none' ? '' : value)}
+                  dir="rtl"
                 >
                   <SelectTrigger className="text-right">
                     <SelectValue placeholder="בחר סטטוס" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">לא ידוע</SelectItem>
-                    <SelectItem value="neutered">מעוקר/מסורס</SelectItem>
-                    <SelectItem value="intact">לא מעוקר</SelectItem>
+                  <SelectContent dir="rtl">
+                    <SelectItem value="none" className="text-right">לא ידוע</SelectItem>
+                    <SelectItem value="neutered" className="text-right">מעוקר/מסורס</SelectItem>
+                    <SelectItem value="intact" className="text-right">לא מעוקר</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -348,11 +352,11 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
           </Tabs>
 
           <div className="flex gap-3 justify-end pt-4 mt-4 border-t">
-            <Button type="button" variant="outline" onClick={onClose}>
-              ביטול
-            </Button>
             <Button type="submit">
               {pet ? 'עדכן' : 'הוסף חיית מחמד'}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose}>
+              ביטול
             </Button>
           </div>
         </form>
