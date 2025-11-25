@@ -179,8 +179,18 @@ export const useWhatsApp = () => {
     return result;
   }, [settings, clinicId, toast]);
 
+  // Build config object for API calls
+  const config: WhatsAppConfig | null = settings?.instanceId && settings?.apiToken
+    ? {
+        instanceId: settings.instanceId,
+        apiToken: settings.apiToken,
+        isEnabled: settings.isEnabled ?? true,
+      }
+    : null;
+
   return {
     settings,
+    config,
     loading,
     checking,
     isConfigured: !!(settings?.instanceId && settings?.apiToken),

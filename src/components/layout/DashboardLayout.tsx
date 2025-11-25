@@ -8,9 +8,10 @@ import { cn } from '@/lib/utils';
 
 interface DashboardLayoutProps {
   children: ReactNode;
+  fullWidth?: boolean;
 }
 
-export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
+export const DashboardLayout = ({ children, fullWidth = false }: DashboardLayoutProps) => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -42,12 +43,16 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isOpen={isSidebarOpen} />
         <main className={cn(
-          "flex-1 overflow-y-auto transition-all duration-300",
-          isSidebarOpen ? "" : ""
+          "flex-1 transition-all duration-300",
+          fullWidth ? "overflow-hidden" : "overflow-y-auto"
         )}>
-          <div className="container mx-auto p-6 max-w-7xl">
-            {children}
-          </div>
+          {fullWidth ? (
+            children
+          ) : (
+            <div className="container mx-auto p-6 max-w-7xl">
+              {children}
+            </div>
+          )}
         </main>
       </div>
     </div>

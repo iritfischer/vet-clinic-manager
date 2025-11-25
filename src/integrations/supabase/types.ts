@@ -186,6 +186,84 @@ export type Database = {
         }
         Relationships: []
       }
+      leads: {
+        Row: {
+          address: string | null
+          clinic_id: string
+          converted_at: string | null
+          converted_client_id: string | null
+          created_at: string
+          email: string | null
+          first_name: string
+          id: string
+          last_name: string | null
+          notes: string | null
+          pet_breed: string | null
+          pet_name: string | null
+          pet_notes: string | null
+          pet_species: string | null
+          phone: string
+          source: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          clinic_id: string
+          converted_at?: string | null
+          converted_client_id?: string | null
+          created_at?: string
+          email?: string | null
+          first_name: string
+          id?: string
+          last_name?: string | null
+          notes?: string | null
+          pet_breed?: string | null
+          pet_name?: string | null
+          pet_notes?: string | null
+          pet_species?: string | null
+          phone: string
+          source?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          clinic_id?: string
+          converted_at?: string | null
+          converted_client_id?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string
+          id?: string
+          last_name?: string | null
+          notes?: string | null
+          pet_breed?: string | null
+          pet_name?: string | null
+          pet_notes?: string | null
+          pet_species?: string | null
+          phone?: string
+          source?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_converted_client_id_fkey"
+            columns: ["converted_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pets: {
         Row: {
           alert_note: string | null
@@ -616,8 +694,10 @@ export type Database = {
           created_at: string
           direction: string
           id: string
+          lead_id: string | null
           provider_message_id: string | null
           reminder_id: string | null
+          sender_phone: string | null
           sent_at: string
         }
         Insert: {
@@ -628,8 +708,10 @@ export type Database = {
           created_at?: string
           direction: string
           id?: string
+          lead_id?: string | null
           provider_message_id?: string | null
           reminder_id?: string | null
+          sender_phone?: string | null
           sent_at?: string
         }
         Update: {
@@ -640,8 +722,10 @@ export type Database = {
           created_at?: string
           direction?: string
           id?: string
+          lead_id?: string | null
           provider_message_id?: string | null
           reminder_id?: string | null
+          sender_phone?: string | null
           sent_at?: string
         }
         Relationships: [
@@ -664,6 +748,13 @@ export type Database = {
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
           {

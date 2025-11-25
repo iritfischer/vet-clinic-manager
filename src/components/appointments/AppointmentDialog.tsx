@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -20,8 +20,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
+import { useToast } from '@/hooks/use-toast';
+import { ClientDialog, ClientFormData } from '@/components/clients/ClientDialog';
+import { Plus, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type Appointment = Tables<'appointments'>;
 type Client = Tables<'clients'>;
@@ -48,9 +65,19 @@ interface AppointmentDialogProps {
 
 export const AppointmentDialog = ({ open, onClose, onSave, appointment }: AppointmentDialogProps) => {
   const { clinicId } = useClinic();
+  const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [clientSearchOpen, setClientSearchOpen] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+
+  // Get selected client for display
+  const selectedClient = useMemo(() =>
+    clients.find(c => c.id === selectedClientId),
+    [clients, selectedClientId]
+  );
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AppointmentFormData>({
     resolver: zodResolver(appointmentSchema),
@@ -144,8 +171,39 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
     setSelectedClientId('');
   };
 
+  const handleSaveClient = async (data: ClientFormData) => {
+    if (!clinicId) return;
+
+    try {
+      const { data: newClient, error } = await supabase
+        .from('clients')
+        .insert({ ...data, clinic_id: clinicId })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({ title: 'הלקוח נוסף בהצלחה' });
+      setClientDialogOpen(false);
+
+      // Refresh clients list and auto-select the new client
+      await fetchClients();
+      if (newClient) {
+        setValue('client_id', newClient.id, { shouldValidate: true });
+        setSelectedClientId(newClient.id);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <>
+      <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-right">
@@ -155,31 +213,84 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="client_id">לקוח *</Label>
-            <Select
-              value={watch('client_id') || ''}
-              onValueChange={(value) => {
-                setValue('client_id', value, { shouldValidate: true });
-                setSelectedClientId(value);
-                setValue('pet_id', '');
-              }}
-            >
-              <SelectTrigger className="text-right">
-                <SelectValue placeholder="בחר לקוח" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-muted-foreground">
-                    אין לקוחות במערכת. אנא הוסף לקוח תחילה.
-                  </div>
-                ) : (
-                  clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.first_name} {client.last_name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Popover open={clientSearchOpen} onOpenChange={setClientSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={clientSearchOpen}
+                    className="flex-1 justify-between text-right"
+                  >
+                    {selectedClient
+                      ? `${selectedClient.first_name} ${selectedClient.last_name}`
+                      : "חפש לקוח..."}
+                    <ChevronsUpDown className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="חפש לפי שם או טלפון..."
+                      value={clientSearchQuery}
+                      onValueChange={setClientSearchQuery}
+                      className="text-right"
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        {clients.length === 0
+                          ? "אין לקוחות במערכת"
+                          : "לא נמצאו לקוחות תואמים"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {clients
+                          .filter((client) => {
+                            if (!clientSearchQuery) return true;
+                            const searchLower = clientSearchQuery.toLowerCase();
+                            const fullName = `${client.first_name} ${client.last_name}`.toLowerCase();
+                            const phone = client.phone_primary || '';
+                            return fullName.includes(searchLower) || phone.includes(clientSearchQuery);
+                          })
+                          .map((client) => (
+                            <CommandItem
+                              key={client.id}
+                              value={client.id}
+                              onSelect={() => {
+                                setValue('client_id', client.id, { shouldValidate: true });
+                                setSelectedClientId(client.id);
+                                setValue('pet_id', '');
+                                setClientSearchOpen(false);
+                                setClientSearchQuery('');
+                              }}
+                              className="flex justify-between"
+                            >
+                              <div className="flex flex-col text-right">
+                                <span>{client.first_name} {client.last_name}</span>
+                                <span className="text-xs text-muted-foreground">{client.phone_primary}</span>
+                              </div>
+                              <Check
+                                className={cn(
+                                  "h-4 w-4",
+                                  selectedClientId === client.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                            </CommandItem>
+                          ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setClientDialogOpen(true)}
+                title="הוסף לקוח חדש"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
             {errors.client_id && (
               <p className="text-sm text-destructive">{errors.client_id.message}</p>
             )}
@@ -285,7 +396,14 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <ClientDialog
+        open={clientDialogOpen}
+        onClose={() => setClientDialogOpen(false)}
+        onSave={handleSaveClient}
+      />
+    </>
   );
 };

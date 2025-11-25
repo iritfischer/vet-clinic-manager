@@ -172,20 +172,18 @@ Deno.serve(async (req) => {
 
     const client = clients?.[0];
 
-    // Save the incoming message
+    // Save the incoming message - include sender_phone!
     const messageToInsert: Record<string, any> = {
       clinic_id: clinicId,
       client_id: client?.id || null,
       content: messageText,
       direction: 'inbound',
       provider_message_id: messageId,
+      sender_phone: senderPhone, // This is critical for grouping conversations!
       sent_at: timestamp ? new Date(timestamp * 1000).toISOString() : new Date().toISOString(),
     };
 
-    // Try to add sender_phone if the column exists
-    // We'll add it to the insert and let it fail silently if column doesn't exist
     console.log('Inserting message:', messageToInsert);
-    console.log('Sender phone (for reference):', senderPhone);
     console.log('Client found:', client ? client.id : 'none');
 
     const { data: insertedData, error: insertError } = await supabase

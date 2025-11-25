@@ -178,10 +178,22 @@ export const setWebhookUrl = async (
   }
 };
 
+// Full settings response from Green API
+export interface GreenApiSettings {
+  webhookUrl?: string;
+  webhookUrlToken?: string;
+  incomingWebhook?: string;
+  outgoingWebhook?: string;
+  outgoingMessageWebhook?: string;
+  outgoingAPIMessageWebhook?: string;
+  stateWebhook?: string;
+  deviceWebhook?: string;
+}
+
 // Get current webhook settings
 export const getWebhookSettings = async (
   config: WhatsAppConfig
-): Promise<{ webhookUrl?: string; incomingWebhook?: string; error?: string }> => {
+): Promise<GreenApiSettings & { error?: string }> => {
   if (!config.instanceId || !config.apiToken) {
     return { error: 'פרטי החיבור חסרים' };
   }
@@ -195,17 +207,273 @@ export const getWebhookSettings = async (
     );
 
     const data = await response.json();
+    console.log('Green API getSettings response:', data);
 
     if (response.ok) {
       return {
         webhookUrl: data.webhookUrl,
+        webhookUrlToken: data.webhookUrlToken,
         incomingWebhook: data.incomingWebhook,
+        outgoingWebhook: data.outgoingWebhook,
+        outgoingMessageWebhook: data.outgoingMessageWebhook,
+        outgoingAPIMessageWebhook: data.outgoingAPIMessageWebhook,
+        stateWebhook: data.stateWebhook,
+        deviceWebhook: data.deviceWebhook,
       };
     } else {
       return { error: data.message || 'שגיאה בקבלת הגדרות' };
     }
   } catch (error: any) {
     return { error: error.message || 'שגיאת רשת' };
+  }
+};
+
+// Receive incoming notification (for polling)
+export interface IncomingNotification {
+  receiptId: number;
+  body: {
+    typeWebhook: string;
+    instanceData: {
+      idInstance: number;
+      wid: string;
+      typeInstance: string;
+    };
+    timestamp: number;
+    idMessage: string;
+    senderData: {
+      chatId: string;
+      sender: string;
+      senderName: string;
+    };
+    messageData: {
+      typeMessage: string;
+      textMessageData?: {
+        textMessage: string;
+      };
+      extendedTextMessageData?: {
+        text: string;
+      };
+    };
+  };
+}
+
+// Receive notification from Green API (polling method)
+export const receiveNotification = async (
+  config: WhatsAppConfig
+): Promise<IncomingNotification | null> => {
+  if (!config.isEnabled || !config.instanceId || !config.apiToken) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `${buildApiUrl(config.instanceId, 'receiveNotification')}/${config.apiToken}`,
+      {
+        method: 'GET',
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok && data) {
+      return data as IncomingNotification;
+    }
+    return null;
+  } catch (error: any) {
+    console.error('Error receiving notification:', error);
+    return null;
+  }
+};
+
+// Delete notification after processing
+export const deleteNotification = async (
+  config: WhatsAppConfig,
+  receiptId: number
+): Promise<boolean> => {
+  if (!config.instanceId || !config.apiToken) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `${buildApiUrl(config.instanceId, 'deleteNotification')}/${config.apiToken}/${receiptId}`,
+      {
+        method: 'DELETE',
+      }
+    );
+
+    const data = await response.json();
+    return response.ok && data.result === true;
+  } catch (error: any) {
+    console.error('Error deleting notification:', error);
+    return false;
+  }
+};
+
+// Extract phone from chatId (972XXXXXXXXX@c.us -> 972XXXXXXXXX)
+export const extractPhoneFromChatId = (chatId: string): string => {
+  return chatId.replace('@c.us', '').replace('@g.us', '');
+};
+
+// Get chat history from Green API
+export interface GreenApiMessage {
+  idMessage: string;
+  timestamp: number;
+  typeMessage: string;
+  chatId: string;
+  textMessage?: string;
+  extendedTextMessage?: {
+    text: string;
+  };
+  type: 'incoming' | 'outgoing';
+  senderId?: string;
+  senderName?: string;
+}
+
+export interface ChatHistoryMessage {
+  idMessage: string;
+  timestamp: number;
+  type: 'incoming' | 'outgoing';
+  chatId: string;
+  textMessage?: string;
+  extendedTextMessageData?: {
+    text: string;
+  };
+  downloadUrl?: string;
+  caption?: string;
+  fileName?: string;
+  typeMessage: string;
+  senderId?: string;
+  senderName?: string;
+}
+
+// Get all chats (conversations list)
+export const getChats = async (
+  config: WhatsAppConfig
+): Promise<{ chatId: string; name: string; lastMessageTime: number }[]> => {
+  if (!config.isEnabled || !config.instanceId || !config.apiToken) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `${buildApiUrl(config.instanceId, 'getChats')}/${config.apiToken}`,
+      {
+        method: 'GET',
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok && Array.isArray(data)) {
+      // Filter only personal chats (not groups)
+      return data
+        .filter((chat: any) => chat.id?.endsWith('@c.us'))
+        .map((chat: any) => ({
+          chatId: chat.id,
+          name: chat.name || extractPhoneFromChatId(chat.id),
+          lastMessageTime: chat.lastMessageTime || 0,
+        }));
+    }
+    return [];
+  } catch (error: any) {
+    console.error('Error getting chats:', error);
+    return [];
+  }
+};
+
+// Get chat history (messages for a specific chat)
+export const getChatHistory = async (
+  config: WhatsAppConfig,
+  chatId: string,
+  count: number = 100
+): Promise<ChatHistoryMessage[]> => {
+  if (!config.isEnabled || !config.instanceId || !config.apiToken) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `${buildApiUrl(config.instanceId, 'getChatHistory')}/${config.apiToken}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chatId,
+          count,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok && Array.isArray(data)) {
+      return data;
+    }
+    return [];
+  } catch (error: any) {
+    console.error('Error getting chat history:', error);
+    return [];
+  }
+};
+
+// Get last incoming messages across all chats
+export const getLastIncomingMessages = async (
+  config: WhatsAppConfig,
+  minutes: number = 1440 // Last 24 hours by default
+): Promise<ChatHistoryMessage[]> => {
+  if (!config.isEnabled || !config.instanceId || !config.apiToken) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `${buildApiUrl(config.instanceId, 'lastIncomingMessages')}/${config.apiToken}?minutes=${minutes}`,
+      {
+        method: 'GET',
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok && Array.isArray(data)) {
+      return data;
+    }
+    return [];
+  } catch (error: any) {
+    console.error('Error getting last incoming messages:', error);
+    return [];
+  }
+};
+
+// Get last outgoing messages across all chats
+export const getLastOutgoingMessages = async (
+  config: WhatsAppConfig,
+  minutes: number = 1440 // Last 24 hours by default
+): Promise<ChatHistoryMessage[]> => {
+  if (!config.isEnabled || !config.instanceId || !config.apiToken) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `${buildApiUrl(config.instanceId, 'lastOutgoingMessages')}/${config.apiToken}?minutes=${minutes}`,
+      {
+        method: 'GET',
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok && Array.isArray(data)) {
+      return data;
+    }
+    return [];
+  } catch (error: any) {
+    console.error('Error getting last outgoing messages:', error);
+    return [];
   }
 };
 

@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientProfile from "./pages/ClientProfile";
+import Leads from "./pages/Leads";
 import Pets from "./pages/Pets";
 import Appointments from "./pages/Appointments";
 import Visits from "./pages/Visits";
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/client/:clientId" element={<ClientProfile />} />
+            <Route path="/leads" element={<Leads />} />
             <Route path="/pets" element={<Pets />} />
             <Route path="/appointments" element={<Appointments />} />
             <Route path="/visits" element={<Visits />} />
