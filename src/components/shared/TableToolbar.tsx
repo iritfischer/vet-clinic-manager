@@ -65,13 +65,13 @@ export const TableToolbar = ({
       {/* Filters */}
       <div className="flex gap-2 items-center flex-wrap">
         {filters?.map((filter) => (
-          <Select key={filter.key} value={filter.value} onValueChange={filter.onChange}>
-            <SelectTrigger className="w-[140px] bg-gray-50 border-gray-200">
+          <Select key={filter.key} value={filter.value} onValueChange={filter.onChange} dir="rtl">
+            <SelectTrigger className="w-[140px] bg-gray-50 border-gray-200 text-right">
               <SelectValue placeholder={filter.label} />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent align="end">
               {filter.options.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
+                <SelectItem key={option.value} value={option.value} className="text-right">
                   {option.label}
                 </SelectItem>
               ))}
