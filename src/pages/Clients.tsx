@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useClinic } from '@/hooks/useClinic';
 import { ClientsTable } from '@/components/clients/ClientsTable';
 import { ClientDialog, ClientFormData } from '@/components/clients/ClientDialog';
 import { useToast } from '@/hooks/use-toast';
+import { TableToolbar } from '@/components/shared/TableToolbar';
 
 type Client = Tables<'clients'>;
 
@@ -16,8 +17,25 @@ const Clients = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const { clinicId } = useClinic();
   const { toast } = useToast();
+
+  // Filter clients based on search and status
+  const filteredClients = useMemo(() => {
+    return clients.filter(client => {
+      const fullName = `${client.first_name} ${client.last_name}`.toLowerCase();
+      const matchesSearch =
+        fullName.includes(searchQuery.toLowerCase()) ||
+        client.phone_primary?.includes(searchQuery) ||
+        client.email?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus = statusFilter === 'all' || client.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [clients, searchQuery, statusFilter]);
 
   useEffect(() => {
     if (clinicId) {
@@ -131,11 +149,33 @@ const Clients = () => {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <ClientsTable
-            clients={clients}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
+          <>
+            <TableToolbar
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="חיפוש לפי שם, טלפון או אימייל..."
+              filters={[
+                {
+                  key: 'status',
+                  label: 'סטטוס',
+                  options: [
+                    { value: 'all', label: 'כל הסטטוסים' },
+                    { value: 'active', label: 'פעיל' },
+                    { value: 'inactive', label: 'לא פעיל' },
+                  ],
+                  value: statusFilter,
+                  onChange: setStatusFilter,
+                },
+              ]}
+              totalCount={clients.length}
+              filteredCount={filteredClients.length}
+            />
+            <ClientsTable
+              clients={filteredClients}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          </>
         )}
 
         <ClientDialog

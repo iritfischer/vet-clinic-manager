@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useClinic } from '@/hooks/useClinic';
 import { PetsTable } from '@/components/pets/PetsTable';
 import { PetDialog } from '@/components/pets/PetDialog';
 import { useToast } from '@/hooks/use-toast';
+import { TableToolbar } from '@/components/shared/TableToolbar';
 
 type Pet = Tables<'pets'> & {
   clients?: Tables<'clients'> | null;
@@ -18,8 +19,25 @@ const Pets = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPet, setEditingPet] = useState<Pet | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [speciesFilter, setSpeciesFilter] = useState('all');
   const { clinicId } = useClinic();
   const { toast } = useToast();
+
+  // Filter pets based on search and species
+  const filteredPets = useMemo(() => {
+    return pets.filter(pet => {
+      const ownerName = pet.clients ? `${pet.clients.first_name} ${pet.clients.last_name}`.toLowerCase() : '';
+      const matchesSearch =
+        pet.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ownerName.includes(searchQuery.toLowerCase()) ||
+        pet.breed?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesSpecies = speciesFilter === 'all' || pet.species === speciesFilter;
+
+      return matchesSearch && matchesSpecies;
+    });
+  }, [pets, searchQuery, speciesFilter]);
 
   useEffect(() => {
     if (clinicId) {
@@ -136,11 +154,36 @@ const Pets = () => {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <PetsTable
-            pets={pets}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
+          <>
+            <TableToolbar
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="חיפוש לפי שם, גזע או בעלים..."
+              filters={[
+                {
+                  key: 'species',
+                  label: 'סוג',
+                  options: [
+                    { value: 'all', label: 'כל הסוגים' },
+                    { value: 'dog', label: 'כלב' },
+                    { value: 'cat', label: 'חתול' },
+                    { value: 'bird', label: 'ציפור' },
+                    { value: 'rabbit', label: 'ארנב' },
+                    { value: 'other', label: 'אחר' },
+                  ],
+                  value: speciesFilter,
+                  onChange: setSpeciesFilter,
+                },
+              ]}
+              totalCount={pets.length}
+              filteredCount={filteredPets.length}
+            />
+            <PetsTable
+              pets={filteredPets}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          </>
         )}
 
         <PetDialog

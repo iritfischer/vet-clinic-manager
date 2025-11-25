@@ -52,13 +52,13 @@ export const AppointmentsTable = ({ appointments, onEdit, onDelete }: Appointmen
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-right">תאריך ושעה</TableHead>
-              <TableHead className="text-right">לקוח</TableHead>
-              <TableHead className="text-right">חיית מחמד</TableHead>
-              <TableHead className="text-right">סוג תור</TableHead>
-              <TableHead className="text-right">סטטוס</TableHead>
-              <TableHead className="text-right">הערות</TableHead>
-              <TableHead className="text-left">פעולות</TableHead>
+              <TableHead>תאריך ושעה</TableHead>
+              <TableHead>לקוח</TableHead>
+              <TableHead>חיית מחמד</TableHead>
+              <TableHead>סוג תור</TableHead>
+              <TableHead>סטטוס</TableHead>
+              <TableHead>הערות</TableHead>
+              <TableHead className="text-end">פעולות</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -71,41 +71,41 @@ export const AppointmentsTable = ({ appointments, onEdit, onDelete }: Appointmen
             ) : (
               appointments.map((appointment) => (
                 <TableRow key={appointment.id}>
-                  <TableCell className="text-right">
+                  <TableCell>
                     <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-end gap-2">
-                        <span>{format(new Date(appointment.start_time), 'dd/MM/yyyy', { locale: he })}</span>
+                      <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span>{format(new Date(appointment.start_time), 'dd/MM/yyyy', { locale: he })}</span>
                       </div>
-                      <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="h-3 w-3" />
                         <span>
                           {format(new Date(appointment.start_time), 'HH:mm')} - {format(new Date(appointment.end_time), 'HH:mm')}
                         </span>
-                        <Clock className="h-3 w-3" />
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="font-medium">
                     {appointment.clients ? (
                       `${appointment.clients.first_name} ${appointment.clients.last_name}`
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell>
                     {appointment.pets ? appointment.pets.name : <span className="text-muted-foreground">-</span>}
                   </TableCell>
-                  <TableCell className="text-right">{appointment.appointment_type}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell>{appointment.appointment_type}</TableCell>
+                  <TableCell>
                     <Badge variant={statusConfig[appointment.status as keyof typeof statusConfig]?.variant || 'default'}>
                       {statusConfig[appointment.status as keyof typeof statusConfig]?.label || appointment.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right max-w-[200px] truncate">
+                  <TableCell className="max-w-[200px] truncate">
                     {appointment.notes || <span className="text-muted-foreground">-</span>}
                   </TableCell>
-                  <TableCell className="text-left">
-                    <div className="flex gap-2">
+                  <TableCell className="text-end">
+                    <div className="flex gap-2 justify-end">
                       <Button
                         variant="ghost"
                         size="icon"

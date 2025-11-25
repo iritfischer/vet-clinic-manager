@@ -568,35 +568,35 @@ const WhatsApp = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-right">תאריך</TableHead>
-                        <TableHead className="text-right">לקוח</TableHead>
-                        <TableHead className="text-right">כיוון</TableHead>
-                        <TableHead className="text-right">תוכן</TableHead>
+                        <TableHead>תאריך</TableHead>
+                        <TableHead>לקוח</TableHead>
+                        <TableHead>כיוון</TableHead>
+                        <TableHead>תוכן</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {messages.map((msg) => (
                         <TableRow key={msg.id}>
-                          <TableCell className="text-right">
+                          <TableCell>
                             {format(new Date(msg.sent_at), 'dd/MM/yyyy HH:mm', {
                               locale: he,
                             })}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell>
                             {msg.clients
                               ? `${msg.clients.first_name} ${msg.clients.last_name}`
                               : msg.sender_phone
                               ? <span className="text-muted-foreground" dir="ltr">{msg.sender_phone}</span>
                               : '—'}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell>
                             <Badge
                               variant={msg.direction === 'outbound' ? 'default' : 'secondary'}
                             >
                               {msg.direction === 'outbound' ? 'יוצא' : 'נכנס'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right max-w-[300px] truncate">
+                          <TableCell className="max-w-[300px] truncate">
                             {msg.content}
                           </TableCell>
                         </TableRow>

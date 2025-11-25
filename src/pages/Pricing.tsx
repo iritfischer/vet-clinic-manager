@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useClinic } from '@/hooks/useClinic';
 import { PriceItemsTable } from '@/components/pricing/PriceItemsTable';
 import { PriceItemDialog } from '@/components/pricing/PriceItemDialog';
 import { useToast } from '@/hooks/use-toast';
+import { TableToolbar } from '@/components/shared/TableToolbar';
 
 type PriceItem = Tables<'price_items'>;
 
@@ -16,8 +17,23 @@ const Pricing = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PriceItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const { clinicId } = useClinic();
   const { toast } = useToast();
+
+  // Filter items based on search and category
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.code?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [items, searchQuery, categoryFilter]);
 
   useEffect(() => {
     if (clinicId) {
@@ -132,11 +148,43 @@ const Pricing = () => {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <PriceItemsTable
-            items={items}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
+          <>
+            <TableToolbar
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="חיפוש לפי שם או קוד..."
+              filters={[
+                {
+                  key: 'category',
+                  label: 'קטגוריה',
+                  options: [
+                    { value: 'all', label: 'כל הקטגוריות' },
+                    { value: 'vaccine', label: 'חיסונים' },
+                    { value: 'medication', label: 'תרופות' },
+                    { value: 'procedure', label: 'פרוצדורות' },
+                    { value: 'consultation', label: 'ייעוץ' },
+                    { value: 'surgery', label: 'ניתוחים' },
+                    { value: 'lab', label: 'מעבדה' },
+                    { value: 'imaging', label: 'הדמיה' },
+                    { value: 'hospitalization', label: 'אשפוז' },
+                    { value: 'grooming', label: 'טיפוח' },
+                    { value: 'food', label: 'מזון' },
+                    { value: 'supplies', label: 'ציוד' },
+                    { value: 'other', label: 'אחר' },
+                  ],
+                  value: categoryFilter,
+                  onChange: setCategoryFilter,
+                },
+              ]}
+              totalCount={items.length}
+              filteredCount={filteredItems.length}
+            />
+            <PriceItemsTable
+              items={filteredItems}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          </>
         )}
 
         <PriceItemDialog

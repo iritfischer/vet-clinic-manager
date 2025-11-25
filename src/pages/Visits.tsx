@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2 } from 'lucide-react';
@@ -9,6 +9,7 @@ import { VisitsTable } from '@/components/visits/VisitsTable';
 import { VisitDialog } from '@/components/visits/VisitDialog';
 import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
 import { useToast } from '@/hooks/use-toast';
+import { TableToolbar } from '@/components/shared/TableToolbar';
 
 type Visit = Tables<'visits'> & {
   clients?: Tables<'clients'> | null;
@@ -22,8 +23,28 @@ const Visits = () => {
   const [editingVisit, setEditingVisit] = useState<Visit | null>(null);
   const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
   const [summaryVisit, setSummaryVisit] = useState<Visit | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const { clinicId } = useClinic();
   const { toast } = useToast();
+
+  // Filter visits based on search and filters
+  const filteredVisits = useMemo(() => {
+    return visits.filter(visit => {
+      const clientName = visit.clients ? `${visit.clients.first_name} ${visit.clients.last_name}`.toLowerCase() : '';
+      const petName = visit.pets?.name?.toLowerCase() || '';
+      const matchesSearch =
+        clientName.includes(searchQuery.toLowerCase()) ||
+        petName.includes(searchQuery.toLowerCase()) ||
+        visit.chief_complaint?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus = statusFilter === 'all' || visit.status === statusFilter;
+      const matchesType = typeFilter === 'all' || visit.visit_type === typeFilter;
+
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [visits, searchQuery, statusFilter, typeFilter]);
 
   useEffect(() => {
     if (clinicId) {
@@ -311,13 +332,51 @@ const Visits = () => {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <VisitsTable
-            visits={visits}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onGeneratePdf={handleGeneratePdf}
-            onSendWhatsApp={handleSendWhatsApp}
-          />
+          <>
+            <TableToolbar
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="חיפוש לפי לקוח, חיה או תלונה..."
+              filters={[
+                {
+                  key: 'status',
+                  label: 'סטטוס',
+                  options: [
+                    { value: 'all', label: 'כל הסטטוסים' },
+                    { value: 'open', label: 'פתוח' },
+                    { value: 'completed', label: 'הושלם' },
+                    { value: 'cancelled', label: 'בוטל' },
+                  ],
+                  value: statusFilter,
+                  onChange: setStatusFilter,
+                },
+                {
+                  key: 'type',
+                  label: 'סוג ביקור',
+                  options: [
+                    { value: 'all', label: 'כל הסוגים' },
+                    { value: 'checkup', label: 'בדיקה' },
+                    { value: 'vaccination', label: 'חיסון' },
+                    { value: 'surgery', label: 'ניתוח' },
+                    { value: 'emergency', label: 'חירום' },
+                    { value: 'followup', label: 'מעקב' },
+                    { value: 'other', label: 'אחר' },
+                  ],
+                  value: typeFilter,
+                  onChange: setTypeFilter,
+                },
+              ]}
+              totalCount={visits.length}
+              filteredCount={filteredVisits.length}
+            />
+            <VisitsTable
+              visits={filteredVisits}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onGeneratePdf={handleGeneratePdf}
+              onSendWhatsApp={handleSendWhatsApp}
+            />
+          </>
         )}
 
         <VisitDialog

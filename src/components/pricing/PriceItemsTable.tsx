@@ -42,7 +42,7 @@ export const PriceItemsTable = ({ items, onEdit, onDelete }: PriceItemsTableProp
             <TableHead>מחיר ללא מע״מ</TableHead>
             <TableHead>מחיר כולל מע״מ</TableHead>
             <TableHead>ניתן להנחה</TableHead>
-            <TableHead className="text-left">פעולות</TableHead>
+            <TableHead className="text-end">פעולות</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -71,8 +71,8 @@ export const PriceItemsTable = ({ items, onEdit, onDelete }: PriceItemsTableProp
                     <Badge variant="outline">לא</Badge>
                   )}
                 </TableCell>
-                <TableCell>
-                  <div className="flex gap-2 justify-start">
+                <TableCell className="text-end">
+                  <div className="flex gap-2 justify-end">
                     <Button
                       variant="ghost"
                       size="icon"

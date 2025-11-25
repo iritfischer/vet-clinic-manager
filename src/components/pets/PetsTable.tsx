@@ -51,14 +51,14 @@ export const PetsTable = ({ pets, onEdit, onDelete }: PetsTableProps) => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-right">שם</TableHead>
-              <TableHead className="text-right">סוג</TableHead>
-              <TableHead className="text-right">גזע</TableHead>
-              <TableHead className="text-right">בעלים</TableHead>
-              <TableHead className="text-right">גיל</TableHead>
-              <TableHead className="text-right">משקל</TableHead>
-              <TableHead className="text-right">סטטוס</TableHead>
-              <TableHead className="text-left">פעולות</TableHead>
+              <TableHead>שם</TableHead>
+              <TableHead>סוג</TableHead>
+              <TableHead>גזע</TableHead>
+              <TableHead>בעלים</TableHead>
+              <TableHead>גיל</TableHead>
+              <TableHead>משקל</TableHead>
+              <TableHead>סטטוס</TableHead>
+              <TableHead className="text-end">פעולות</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -76,47 +76,47 @@ export const PetsTable = ({ pets, onEdit, onDelete }: PetsTableProps) => {
 
                 return (
                   <TableRow key={pet.id}>
-                    <TableCell className="font-medium text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <span>{pet.name}</span>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
                         <PawPrint className="h-4 w-4 text-muted-foreground" />
+                        <span>{pet.name}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       <Badge className={speciesConfig[pet.species as keyof typeof speciesConfig]?.color || 'bg-muted'}>
                         {speciesConfig[pet.species as keyof typeof speciesConfig]?.label || pet.species}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       {pet.breed || <span className="text-muted-foreground">-</span>}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       {pet.clients ? (
                         `${pet.clients.first_name} ${pet.clients.last_name}`
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       {age !== null ? `${age} שנים` : <span className="text-muted-foreground">-</span>}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       {pet.current_weight ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <span>{pet.current_weight} ק"ג</span>
+                        <div className="flex items-center gap-2">
                           <Weight className="h-4 w-4 text-muted-foreground" />
+                          <span>{pet.current_weight} ק"ג</span>
                         </div>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       <Badge variant={pet.status === 'active' ? 'default' : 'outline'}>
                         {pet.status === 'active' ? 'פעיל' : 'לא פעיל'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-left">
-                      <div className="flex gap-2">
+                    <TableCell className="text-end">
+                      <div className="flex gap-2 justify-end">
                         <Button
                           variant="ghost"
                           size="icon"

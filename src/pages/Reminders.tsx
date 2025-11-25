@@ -298,13 +298,13 @@ const Reminders = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right">סוג</TableHead>
-                  <TableHead className="text-right">תאריך</TableHead>
-                  <TableHead className="text-right">לקוח</TableHead>
-                  <TableHead className="text-right">חיית מחמד</TableHead>
-                  <TableHead className="text-right">הערות</TableHead>
-                  <TableHead className="text-right">סטטוס</TableHead>
-                  <TableHead className="text-right">פעולות</TableHead>
+                  <TableHead>סוג</TableHead>
+                  <TableHead>תאריך</TableHead>
+                  <TableHead>לקוח</TableHead>
+                  <TableHead>חיית מחמד</TableHead>
+                  <TableHead>הערות</TableHead>
+                  <TableHead>סטטוס</TableHead>
+                  <TableHead className="text-end">פעולות</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -334,8 +334,8 @@ const Reminders = () => {
                         {reminder.status === 'completed' ? 'הושלם' : 'פתוח'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+                    <TableCell className="text-end">
+                      <div className="flex items-center gap-2 justify-end">
                         {reminder.status === 'open' && (
                           <Button
                             size="sm"
