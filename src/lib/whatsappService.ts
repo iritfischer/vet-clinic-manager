@@ -273,14 +273,13 @@ export const receiveNotification = async (
       }
     );
 
-    const data = await response.json();
-
-    if (response.ok && data) {
-      return data as IncomingNotification;
+    if (!response.ok) {
+      return null;
     }
-    return null;
-  } catch (error: any) {
-    console.error('Error receiving notification:', error);
+
+    const data = await response.json();
+    return data || null;
+  } catch {
     return null;
   }
 };

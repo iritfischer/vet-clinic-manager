@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useAuth } from '@/hooks/useAuth';
+import { useWhatsAppPolling } from '@/hooks/useWhatsAppPolling';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +16,9 @@ export const DashboardLayout = ({ children, fullWidth = false }: DashboardLayout
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // WhatsApp polling for incoming messages
+  useWhatsAppPolling();
 
   useEffect(() => {
     if (!loading && !user) {

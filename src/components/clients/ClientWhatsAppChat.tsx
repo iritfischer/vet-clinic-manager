@@ -37,28 +37,57 @@ export const ClientWhatsAppChat = ({ clientId, clientName, clientPhone }: Client
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Normalize phone number to get last 9 digits for matching
+  const normalizePhoneForSearch = (phone: string): string => {
+    if (!phone) return '';
+    return phone.replace(/\D/g, '').slice(-9);
+  };
+
   // Fetch messages for this client
   const fetchMessages = async () => {
     if (!clinicId || !clientId) {
-      console.log('Missing clinicId or clientId:', { clinicId, clientId });
       return;
     }
 
-    console.log('Fetching messages for client:', clientId);
     try {
-      const { data, error } = await supabase
+      // First get messages by client_id
+      const { data: clientMessages, error: clientError } = await supabase
         .from('whatsapp_messages')
         .select('*')
         .eq('clinic_id', clinicId)
-        .eq('client_id', clientId)
-        .order('sent_at', { ascending: true });
+        .eq('client_id', clientId);
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      if (clientError) throw clientError;
+
+      // Also get incoming messages by phone that might not be linked to client_id
+      const normalizedPhone = normalizePhoneForSearch(clientPhone);
+      let phoneMessages: typeof clientMessages = [];
+
+      if (normalizedPhone) {
+        const { data: phoneMsgs, error: phoneError } = await supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .eq('clinic_id', clinicId)
+          .ilike('sender_phone', `%${normalizedPhone}%`)
+          .is('client_id', null);
+
+        if (!phoneError && phoneMsgs) {
+          phoneMessages = phoneMsgs;
+        }
       }
-      console.log('Fetched messages:', data?.length || 0, data);
-      setMessages(data || []);
+
+      // Combine and deduplicate
+      const allMessages = [...(clientMessages || []), ...phoneMessages];
+      const uniqueMessages = allMessages.filter((msg, index, self) =>
+        index === self.findIndex(m => m.id === msg.id)
+      );
+
+      // Sort by sent_at
+      uniqueMessages.sort((a, b) =>
+        new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
+      );
+
+      setMessages(uniqueMessages);
     } catch (error: any) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -70,41 +99,46 @@ export const ClientWhatsAppChat = ({ clientId, clientName, clientPhone }: Client
     fetchMessages();
 
     // Subscribe to realtime updates for new messages
+    // Listen to all clinic messages and filter client-side (since Supabase realtime doesn't support ILIKE)
     if (clinicId && clientId) {
-      console.log('Setting up realtime subscription for client:', clientId);
+      const normalizedPhone = normalizePhoneForSearch(clientPhone);
+
       const channel = supabase
-        .channel(`whatsapp-messages-${clientId}`)
+        .channel(`whatsapp-messages-client-${clientId}`)
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'whatsapp_messages',
-            filter: `client_id=eq.${clientId}`,
+            filter: `clinic_id=eq.${clinicId}`,
           },
           (payload) => {
-            console.log('Realtime message received:', payload);
-            // Add new message to the list (avoid duplicates)
-            const newMsg = payload.new as WhatsAppMessage;
-            setMessages((prev) => {
-              // Check if message already exists
-              if (prev.some(m => m.id === newMsg.id)) {
-                return prev;
-              }
-              return [...prev, newMsg];
-            });
+            const newMsg = payload.new as WhatsAppMessage & { client_id?: string; sender_phone?: string };
+
+            // Check if this message belongs to this client (by client_id or phone)
+            const isForThisClient =
+              newMsg.client_id === clientId ||
+              (newMsg.sender_phone && newMsg.sender_phone.includes(normalizedPhone));
+
+            if (isForThisClient) {
+              setMessages((prev) => {
+                // Check if message already exists
+                if (prev.some(m => m.id === newMsg.id)) {
+                  return prev;
+                }
+                return [...prev, newMsg];
+              });
+            }
           }
         )
-        .subscribe((status) => {
-          console.log('Realtime subscription status:', status);
-        });
+        .subscribe();
 
       return () => {
-        console.log('Cleaning up realtime subscription');
         supabase.removeChannel(channel);
       };
     }
-  }, [clinicId, clientId]);
+  }, [clinicId, clientId, clientPhone]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {

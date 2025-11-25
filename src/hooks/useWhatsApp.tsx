@@ -141,7 +141,7 @@ export const useWhatsApp = () => {
 
     // Log message to database
     if (clinicId) {
-      const insertData = {
+      const { error } = await supabase.from('whatsapp_messages').insert({
         clinic_id: clinicId,
         client_id: metadata?.clientId || null,
         appointment_id: metadata?.appointmentId || null,
@@ -150,16 +150,10 @@ export const useWhatsApp = () => {
         direction: 'outbound',
         provider_message_id: result.messageId || null,
         sent_at: new Date().toISOString(),
-      };
-      console.log('Inserting WhatsApp message:', insertData);
-
-      const { data, error } = await supabase.from('whatsapp_messages').insert(insertData).select();
+      });
 
       if (error) {
         console.error('Failed to log WhatsApp message:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-      } else {
-        console.log('Message saved successfully:', data);
       }
     }
 

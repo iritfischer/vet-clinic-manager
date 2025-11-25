@@ -127,8 +127,8 @@ export const useWhatsAppPolling = (onNewMessage?: () => void) => {
           onNewMessage();
         }
       }
-    } catch (error) {
-      console.error('Polling error:', error);
+    } catch {
+      // Silently ignore polling errors
     } finally {
       isProcessingRef.current = false;
     }
