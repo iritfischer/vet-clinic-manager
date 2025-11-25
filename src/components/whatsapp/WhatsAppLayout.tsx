@@ -145,7 +145,7 @@ export const WhatsAppLayout = () => {
       {/* Main Content - WhatsApp Web Style Layout */}
       <div className="flex-1 flex min-h-0">
         {/* Conversation List (Right side in RTL) */}
-        <div className="w-[400px] min-w-[400px] flex-shrink-0 h-full overflow-y-auto border-l">
+        <div className="w-[480px] min-w-[450px] flex-shrink-0 h-full overflow-y-auto border-l">
           <ConversationList
             conversations={conversations}
             selectedId={selectedConversation?.id || null}

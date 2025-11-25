@@ -8,6 +8,9 @@ export type LeadUpdate = Database['public']['Tables']['leads']['Update'];
 // Lead status enum
 export type LeadStatus = 'new' | 'contacted' | 'converted' | 'lost';
 
+// Lead source enum
+export type LeadSource = 'whatsapp' | 'phone' | 'website' | 'facebook' | 'instagram' | 'referral' | 'walk_in' | 'other';
+
 // Form data for creating/editing leads
 export interface LeadFormData {
   first_name: string;
@@ -17,6 +20,7 @@ export interface LeadFormData {
   address?: string;
   notes?: string;
   status: LeadStatus;
+  source?: LeadSource;
   pet_name?: string;
   pet_species?: string;
   pet_breed?: string;

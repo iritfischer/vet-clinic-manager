@@ -23,7 +23,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { ChevronDown, PawPrint } from 'lucide-react';
-import { Lead, LeadFormData, LeadStatus } from '@/types/leads';
+import { Lead, LeadFormData, LeadStatus, LeadSource } from '@/types/leads';
 import { useState } from 'react';
 
 interface LeadDialogProps {
@@ -50,6 +50,17 @@ const speciesOptions = [
   { value: 'other', label: 'אחר' },
 ];
 
+const sourceOptions: { value: LeadSource; label: string }[] = [
+  { value: 'whatsapp', label: 'וואטסאפ' },
+  { value: 'phone', label: 'טלפון' },
+  { value: 'website', label: 'אתר אינטרנט' },
+  { value: 'facebook', label: 'פייסבוק' },
+  { value: 'instagram', label: 'אינסטגרם' },
+  { value: 'referral', label: 'המלצה' },
+  { value: 'walk_in', label: 'הגיע למקום' },
+  { value: 'other', label: 'אחר' },
+];
+
 export const LeadDialog = ({ open, onClose, onSave, lead, initialPhone }: LeadDialogProps) => {
   const [petSectionOpen, setPetSectionOpen] = useState(false);
 
@@ -62,6 +73,7 @@ export const LeadDialog = ({ open, onClose, onSave, lead, initialPhone }: LeadDi
       address: '',
       notes: '',
       status: 'new',
+      source: undefined,
       pet_name: '',
       pet_species: '',
       pet_breed: '',
@@ -79,6 +91,7 @@ export const LeadDialog = ({ open, onClose, onSave, lead, initialPhone }: LeadDi
         address: lead.address || '',
         notes: lead.notes || '',
         status: lead.status as LeadStatus,
+        source: (lead.source as LeadSource) || undefined,
         pet_name: lead.pet_name || '',
         pet_species: lead.pet_species || '',
         pet_breed: lead.pet_breed || '',
@@ -97,6 +110,7 @@ export const LeadDialog = ({ open, onClose, onSave, lead, initialPhone }: LeadDi
         address: '',
         notes: '',
         status: 'new',
+        source: undefined,
         pet_name: '',
         pet_species: '',
         pet_breed: '',
@@ -180,23 +194,44 @@ export const LeadDialog = ({ open, onClose, onSave, lead, initialPhone }: LeadDi
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="status">סטטוס</Label>
-            <Select
-              value={currentStatus}
-              onValueChange={(value) => setValue('status', value as LeadStatus)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="status">סטטוס</Label>
+              <Select
+                value={currentStatus}
+                onValueChange={(value) => setValue('status', value as LeadStatus)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="source">מקור הגעה</Label>
+              <Select
+                value={watch('source') || ''}
+                onValueChange={(value) => setValue('source', value as LeadSource)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="בחר מקור" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sourceOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">

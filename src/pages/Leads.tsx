@@ -41,7 +41,7 @@ import {
 import { useLeads } from '@/hooks/useLeads';
 import { LeadDialog } from '@/components/whatsapp/LeadDialog';
 import { ConvertToClientDialog } from '@/components/whatsapp/ConvertToClientDialog';
-import { Lead, LeadFormData, LeadStatus } from '@/types/leads';
+import { Lead, LeadFormData, LeadStatus, LeadSource } from '@/types/leads';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
@@ -51,6 +51,17 @@ const statusConfig: Record<LeadStatus, { label: string; color: string }> = {
   contacted: { label: 'יצרנו קשר', color: 'bg-yellow-100 text-yellow-800' },
   converted: { label: 'הומר ללקוח', color: 'bg-green-100 text-green-800' },
   lost: { label: 'אבוד', color: 'bg-gray-100 text-gray-800' },
+};
+
+const sourceConfig: Record<LeadSource, string> = {
+  whatsapp: 'וואטסאפ',
+  phone: 'טלפון',
+  website: 'אתר אינטרנט',
+  facebook: 'פייסבוק',
+  instagram: 'אינסטגרם',
+  referral: 'המלצה',
+  walk_in: 'הגיע למקום',
+  other: 'אחר',
 };
 
 const Leads = () => {
@@ -247,6 +258,7 @@ const Leads = () => {
                     <TableHead className="text-right">טלפון</TableHead>
                     <TableHead className="text-right">אימייל</TableHead>
                     <TableHead className="text-right">חיה</TableHead>
+                    <TableHead className="text-right">מקור</TableHead>
                     <TableHead className="text-right">סטטוס</TableHead>
                     <TableHead className="text-right">נוצר</TableHead>
                     <TableHead className="text-right">פעולות</TableHead>
@@ -285,6 +297,15 @@ const Leads = () => {
                               </span>
                             )}
                           </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {lead.source ? (
+                          <span className="text-sm">
+                            {sourceConfig[lead.source as LeadSource] || lead.source}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
