@@ -18,7 +18,8 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
-  Send
+  Send,
+  Edit
 } from 'lucide-react';
 import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
 import { VisitWithRelations } from '@/lib/visitSummaryTypes';
@@ -43,6 +44,7 @@ interface PetTimelineProps {
   petId: string;
   petName: string;
   onNewVisit: () => void;
+  onEditVisit?: (visit: Tables<'visits'>) => void;
   onExportPDF?: (visitId: string) => void;
 }
 
@@ -77,7 +79,7 @@ const formatVisitType = (visitType: string): string => {
   return visitTypeLabels[visitType] || visitType;
 };
 
-export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF }: PetTimelineProps) => {
+export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onEditVisit, onExportPDF }: PetTimelineProps) => {
   const { clinicId } = useClinic();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -270,6 +272,19 @@ export const PetTimeline = ({ clientId, petId, petName, onNewVisit, onExportPDF 
                             <ChevronUp className="h-5 w-5 text-muted-foreground" />
                           ) : (
                             <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          {onEditVisit && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditVisit(event.details);
+                              }}
+                              title="ערוך ביקור"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
                           )}
                           <Button
                             variant="ghost"

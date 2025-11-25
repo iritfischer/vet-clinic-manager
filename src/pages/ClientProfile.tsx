@@ -63,6 +63,7 @@ const ClientProfile = () => {
   const [loading, setLoading] = useState(true);
   const [showNewVisitForm, setShowNewVisitForm] = useState(false);
   const [selectedPetForNewVisit, setSelectedPetForNewVisit] = useState<string | null>(null);
+  const [editingVisit, setEditingVisit] = useState<Visit | null>(null);
   const [newMetrics, setNewMetrics] = useState<Record<string, {
     date: string;
     weight: string;
@@ -275,6 +276,91 @@ const ClientProfile = () => {
           : 'הביקור נוסף בהצלחה',
       });
 
+      setShowNewVisitForm(false);
+      setSelectedPetForNewVisit(null);
+      fetchClientData();
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleEditVisit = async (visitData: any) => {
+    try {
+      if (!clinicId || !editingVisit) return;
+
+      // Extract follow_ups and price_items separately
+      const follow_ups = visitData._follow_ups || visitData.follow_ups;
+      const price_items = visitData._price_items || visitData.price_items;
+
+      // Build clean object with only valid visits table columns
+      const cleanVisitData = {
+        client_id: visitData.client_id,
+        pet_id: visitData.pet_id,
+        visit_type: visitData.visit_type,
+        visit_date: visitData.visit_date,
+        chief_complaint: visitData.chief_complaint || null,
+        history: visitData.history || null,
+        physical_exam: visitData.physical_exam || null,
+        diagnoses: visitData.diagnoses || null,
+        treatments: visitData.treatments || null,
+        medications: visitData.medications || null,
+        recommendations: visitData.recommendations || null,
+        client_summary: visitData.client_summary || null,
+        status: visitData.status || 'open',
+      };
+
+      const { error: visitError } = await supabase
+        .from('visits')
+        .update(cleanVisitData)
+        .eq('id', editingVisit.id);
+
+      if (visitError) throw visitError;
+
+      // Update price items - delete existing and insert new ones
+      if (price_items) {
+        // Delete existing price items
+        await supabase
+          .from('visit_price_items')
+          .delete()
+          .eq('visit_id', editingVisit.id);
+
+        // Insert new price items if any
+        if (price_items.length > 0) {
+          const itemIds = price_items.map((item: any) => item.item_id);
+          const { data: priceItemsData } = await supabase
+            .from('price_items')
+            .select('id, price_with_vat')
+            .in('id', itemIds);
+
+          const priceItemsToInsert = price_items.map((item: any) => {
+            const priceItem = priceItemsData?.find(p => p.id === item.item_id);
+            return {
+              visit_id: editingVisit.id,
+              price_item_id: item.item_id,
+              quantity: item.quantity,
+              clinic_id: clinicId,
+              price_at_time: priceItem?.price_with_vat || 0,
+            };
+          });
+
+          const { error: priceItemsError } = await supabase
+            .from('visit_price_items')
+            .insert(priceItemsToInsert);
+
+          if (priceItemsError) throw priceItemsError;
+        }
+      }
+
+      toast({
+        title: 'הצלחה',
+        description: 'הביקור עודכן בהצלחה',
+      });
+
+      setEditingVisit(null);
       setShowNewVisitForm(false);
       setSelectedPetForNewVisit(null);
       fetchClientData();
@@ -1385,15 +1471,17 @@ const ClientProfile = () => {
 
                       {/* Visits/Timeline Tab */}
                       <TabsContent value="visits" className="mt-6">
-                        {showNewVisitForm && selectedPetForNewVisit === pet.id ? (
+                        {(showNewVisitForm && selectedPetForNewVisit === pet.id) || (editingVisit && editingVisit.pet_id === pet.id) ? (
                           <Card className="mb-6">
                             <CardContent className="p-4">
                               <VisitForm
-                                onSave={handleNewVisit}
+                                onSave={editingVisit ? handleEditVisit : handleNewVisit}
                                 onCancel={() => {
                                   setShowNewVisitForm(false);
                                   setSelectedPetForNewVisit(null);
+                                  setEditingVisit(null);
                                 }}
+                                visit={editingVisit}
                                 preSelectedClientId={client.id}
                                 preSelectedPetId={pet.id}
                               />
@@ -1407,6 +1495,12 @@ const ClientProfile = () => {
                             onNewVisit={() => {
                               setSelectedPetForNewVisit(pet.id);
                               setShowNewVisitForm(true);
+                              setEditingVisit(null);
+                            }}
+                            onEditVisit={(visit) => {
+                              setEditingVisit(visit);
+                              setSelectedPetForNewVisit(null);
+                              setShowNewVisitForm(false);
                             }}
                             onExportPDF={handleExportPDF}
                           />
