@@ -95,7 +95,7 @@ export const VisitsTable = ({ visits, onEdit, onDelete, onGeneratePdf, onSendWha
             <AccordionContent className="px-6 pb-4">
               <div className="space-y-6 pt-4">
                 {/* Actions */}
-                <div className="flex gap-2 pb-4 border-b">
+                <div className="flex gap-2 pb-4 border-b justify-end">
                   <Button
                     variant="outline"
                     size="sm"

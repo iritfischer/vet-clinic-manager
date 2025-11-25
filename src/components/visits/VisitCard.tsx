@@ -198,9 +198,9 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardP
   // View Mode
   if (mode === 'view' && visit) {
     return (
-      <div className="space-y-6" dir="rtl">
+      <div className="space-y-6 text-right" dir="rtl">
         {/* Header Info */}
-        <div className="flex items-center gap-4 flex-wrap pb-4 border-b justify-end">
+        <div className="flex items-center gap-4 flex-wrap pb-4 border-b">
           <div className="text-sm text-muted-foreground">
             <span className="font-medium">תאריך:</span>{' '}
             {format(new Date(visit.visit_date), 'dd/MM/yyyy HH:mm', { locale: he })}
@@ -224,37 +224,14 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardP
         </div>
 
         {/* Visit Details */}
-        <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-4">
-            {visit.chief_complaint && (
-              <div>
-                <h4 className="font-semibold text-sm mb-2">תלונה עיקרית</h4>
-                <p className="text-sm text-muted-foreground">{visit.chief_complaint}</p>
-              </div>
-            )}
-
-            {visit.history && (
-              <div>
-                <h4 className="font-semibold text-sm mb-2">היסטוריה</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{visit.history}</p>
-              </div>
-            )}
-
-            {visit.physical_exam && (
-              <div>
-                <h4 className="font-semibold text-sm mb-2">בדיקה גופנית</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{visit.physical_exam}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-6" style={{ direction: 'rtl' }}>
+          <div className="space-y-4 text-right">
             {visit.diagnoses && Array.isArray(visit.diagnoses) && visit.diagnoses.length > 0 && (
               <div>
-                <h4 className="font-semibold text-sm mb-2">אבחנות</h4>
+                <h4 className="font-semibold text-sm mb-2 text-right">אבחנות</h4>
                 <div className="space-y-2">
                   {visit.diagnoses.map((diagnosis: any, idx: number) => (
-                    <div key={idx} className="text-sm bg-accent/50 rounded p-2">
+                    <div key={idx} className="text-sm bg-accent/50 rounded p-2 text-right">
                       <p className="font-medium">{diagnosis.diagnosis}</p>
                       {diagnosis.notes && (
                         <p className="text-muted-foreground text-xs mt-1">{diagnosis.notes}</p>
@@ -267,10 +244,10 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardP
 
             {visit.treatments && Array.isArray(visit.treatments) && visit.treatments.length > 0 && (
               <div>
-                <h4 className="font-semibold text-sm mb-2">טיפולים</h4>
+                <h4 className="font-semibold text-sm mb-2 text-right">טיפולים</h4>
                 <div className="space-y-2">
                   {visit.treatments.map((treatment: any, idx: number) => (
-                    <div key={idx} className="text-sm bg-accent/50 rounded p-2">
+                    <div key={idx} className="text-sm bg-accent/50 rounded p-2 text-right">
                       <p className="font-medium">{treatment.treatment}</p>
                       {treatment.notes && (
                         <p className="text-muted-foreground text-xs mt-1">{treatment.notes}</p>
@@ -283,10 +260,10 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardP
 
             {visit.medications && Array.isArray(visit.medications) && visit.medications.length > 0 && (
               <div>
-                <h4 className="font-semibold text-sm mb-2">תרופות</h4>
+                <h4 className="font-semibold text-sm mb-2 text-right">תרופות</h4>
                 <div className="space-y-2">
                   {visit.medications.map((medication: any, idx: number) => (
-                    <div key={idx} className="text-sm bg-accent/50 rounded p-2">
+                    <div key={idx} className="text-sm bg-accent/50 rounded p-2 text-right">
                       <p className="font-medium">{medication.medication}</p>
                       <div className="text-muted-foreground text-xs mt-1 space-y-0.5">
                         {medication.dosage && <p>מינון: {medication.dosage}</p>}
@@ -299,22 +276,45 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardP
               </div>
             )}
           </div>
+
+          <div className="space-y-4 text-right">
+            {visit.chief_complaint && (
+              <div>
+                <h4 className="font-semibold text-sm mb-2 text-right">תלונה עיקרית</h4>
+                <p className="text-sm text-muted-foreground text-right">{visit.chief_complaint}</p>
+              </div>
+            )}
+
+            {visit.history && (
+              <div>
+                <h4 className="font-semibold text-sm mb-2 text-right">היסטוריה</h4>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap text-right">{visit.history}</p>
+              </div>
+            )}
+
+            {visit.physical_exam && (
+              <div>
+                <h4 className="font-semibold text-sm mb-2 text-right">בדיקה גופנית</h4>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap text-right">{visit.physical_exam}</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Recommendations and Summary */}
         {(visit.recommendations || visit.client_summary) && (
-          <div className="space-y-4 pt-4 border-t">
+          <div className="space-y-4 pt-4 border-t text-right">
             {visit.recommendations && (
               <div>
-                <h4 className="font-semibold text-sm mb-2">המלצות</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{visit.recommendations}</p>
+                <h4 className="font-semibold text-sm mb-2 text-right">המלצות</h4>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap text-right">{visit.recommendations}</p>
               </div>
             )}
 
             {visit.client_summary && (
               <div>
-                <h4 className="font-semibold text-sm mb-2">סיכום ללקוח</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-primary/5 rounded p-3">
+                <h4 className="font-semibold text-sm mb-2 text-right">סיכום ללקוח</h4>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-primary/5 rounded p-3 text-right">
                   {visit.client_summary}
                 </p>
               </div>
