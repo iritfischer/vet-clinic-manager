@@ -262,7 +262,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsList className="grid w-full grid-cols-2 mb-4" dir="rtl">
             <TabsTrigger value="preview" className="flex items-center gap-2">
               <Eye className="h-4 w-4" />
               תצוגה מקדימה

@@ -182,6 +182,67 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     }
   }, [preSelectedClientId]);
 
+  // Load existing visit data when editing
+  useEffect(() => {
+    const loadVisitData = async () => {
+      if (!visit) return;
+
+      // Parse visit_type for vaccination
+      let visitType = visit.visit_type;
+      let vaccinationType = '';
+      if (visit.visit_type?.startsWith('vaccination:')) {
+        const parts = visit.visit_type.split(':');
+        visitType = 'vaccination';
+        vaccinationType = parts[1] || '';
+      }
+
+      // Set form values
+      setValue('client_id', visit.client_id);
+      setValue('pet_id', visit.pet_id);
+      setValue('visit_type', visitType);
+      setValue('vaccination_type', vaccinationType);
+      setValue('visit_date', visit.visit_date.slice(0, 16));
+      setValue('chief_complaint', visit.chief_complaint || '');
+      setValue('history', visit.history || '');
+      setValue('physical_exam', visit.physical_exam || '');
+      setValue('recommendations', visit.recommendations || '');
+      setValue('client_summary', visit.client_summary || '');
+      setValue('status', visit.status as 'open' | 'completed' | 'cancelled');
+
+      // Set arrays
+      if (Array.isArray(visit.diagnoses)) {
+        setValue('diagnoses', visit.diagnoses as any);
+      }
+      if (Array.isArray(visit.treatments)) {
+        setValue('treatments', visit.treatments as any);
+      }
+      if (Array.isArray(visit.medications)) {
+        setValue('medications', visit.medications as any);
+      }
+
+      // Load price items for this visit
+      if (clinicId) {
+        const { data: visitPriceItems } = await supabase
+          .from('visit_price_items')
+          .select('*')
+          .eq('visit_id', visit.id);
+
+        if (visitPriceItems && visitPriceItems.length > 0) {
+          const priceItemsData = visitPriceItems.map((item: any) => ({
+            item_id: item.price_item_id,
+            quantity: item.quantity,
+          }));
+          setValue('price_items', priceItemsData);
+        }
+      }
+
+      // Set selected client to fetch pets
+      setSelectedClientId(visit.client_id);
+    };
+
+    loadVisitData();
+  }, [visit, clinicId, setValue]);
+
   const fetchClients = async () => {
     if (!clinicId) return;
     const { data } = await supabase
@@ -299,7 +360,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-6" dir="rtl">
               <TabsTrigger value="basic">פרטים</TabsTrigger>
               <TabsTrigger value="exam">בדיקה</TabsTrigger>
               <TabsTrigger value="diagnosis">אבחנה</TabsTrigger>
