@@ -177,10 +177,10 @@ export const Header = ({ isSidebarOpen, onToggleSidebar }: HeaderProps) => {
         </div>
       </div>
 
-      {/* Center - Global Search */}
+      {/* Center - Global Search (Pet/Client) - Orange theme */}
       <div className="flex-1 max-w-md mx-4 relative" ref={searchRef}>
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-300" />
           <Input
             ref={inputRef}
             type="text"
@@ -192,16 +192,16 @@ export const Header = ({ isSidebarOpen, onToggleSidebar }: HeaderProps) => {
             }}
             onFocus={() => searchQuery.length >= 2 && setShowResults(true)}
             onKeyDown={handleKeyDown}
-            className="pr-10 bg-gray-800 border-gray-700 text-white placeholder:text-gray-400 focus:border-primary"
+            className="pr-10 bg-orange-950/60 border-2 border-orange-500/70 text-white placeholder:text-orange-200/70 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/30 rounded-lg shadow-lg shadow-orange-500/20"
             dir="rtl"
           />
         </div>
 
-        {/* Search Results Dropdown */}
+        {/* Search Results Dropdown - Orange themed */}
         {showResults && searchQuery.length >= 2 && (
-          <div className="absolute top-full mt-1 w-full bg-white rounded-lg shadow-lg border overflow-hidden z-50" dir="rtl">
+          <div className="absolute top-full mt-2 w-full bg-white rounded-xl shadow-xl border-2 border-orange-300 overflow-hidden z-50" dir="rtl">
             {isSearching ? (
-              <div className="p-4 text-center text-gray-500">מחפש...</div>
+              <div className="p-4 text-center text-orange-600 font-medium">מחפש...</div>
             ) : searchResults.length === 0 ? (
               <div className="p-4 text-center text-gray-500">לא נמצאו תוצאות</div>
             ) : (
@@ -211,18 +211,18 @@ export const Header = ({ isSidebarOpen, onToggleSidebar }: HeaderProps) => {
                     key={`${result.type}-${result.id}`}
                     onClick={() => handleResultClick(result)}
                     className={cn(
-                      "px-4 py-3 cursor-pointer hover:bg-gray-100 flex items-center gap-3 border-b last:border-b-0",
-                      selectedIndex === index && "bg-gray-100"
+                      "px-4 py-3 cursor-pointer hover:bg-orange-50 flex items-center gap-3 border-b border-orange-100 last:border-b-0 transition-colors",
+                      selectedIndex === index && "bg-orange-100"
                     )}
                   >
                     <div className={cn(
                       "p-2 rounded-full",
-                      result.type === 'client' ? "bg-blue-100" : "bg-green-100"
+                      result.type === 'client' ? "bg-orange-100" : "bg-amber-100"
                     )}>
                       {result.type === 'client' ? (
-                        <User className="h-4 w-4 text-blue-600" />
+                        <User className="h-4 w-4 text-orange-600" />
                       ) : (
-                        <PawPrint className="h-4 w-4 text-green-600" />
+                        <PawPrint className="h-4 w-4 text-amber-600" />
                       )}
                     </div>
                     <div className="flex-1">
@@ -235,7 +235,10 @@ export const Header = ({ isSidebarOpen, onToggleSidebar }: HeaderProps) => {
                         )}
                       </div>
                     </div>
-                    <span className="text-xs text-gray-400">
+                    <span className={cn(
+                      "text-xs px-2 py-1 rounded-full font-medium",
+                      result.type === 'client' ? "bg-orange-100 text-orange-700" : "bg-amber-100 text-amber-700"
+                    )}>
                       {result.type === 'client' ? 'לקוח' : 'חיה'}
                     </span>
                   </li>

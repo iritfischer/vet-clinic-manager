@@ -15,13 +15,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Trash2, X, Calendar, Syringe } from 'lucide-react';
+import { Plus, Trash2, X, Calendar, Syringe, PlusCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { TagInput } from '@/components/shared/TagInput';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 type Visit = Tables<'visits'>;
 type Client = Tables<'clients'>;
@@ -109,10 +116,21 @@ interface VisitFormProps {
 
 export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSelectedPetId }: VisitFormProps) => {
   const { clinicId } = useClinic();
+  const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(preSelectedClientId || '');
+
+  // State for new price item dialog
+  const [showNewPriceItemDialog, setShowNewPriceItemDialog] = useState(false);
+  const [newPriceItem, setNewPriceItem] = useState({
+    name: '',
+    category: '',
+    price_before_vat: '',
+    price_with_vat: '',
+  });
+  const [savingPriceItem, setSavingPriceItem] = useState(false);
 
   const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<VisitFormData>({
     resolver: zodResolver(visitSchema),
@@ -275,6 +293,65 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       .eq('clinic_id', clinicId)
       .order('name');
     if (data) setPriceItems(data);
+  };
+
+  // Handle creating new price item
+  const handleCreatePriceItem = async () => {
+    if (!clinicId || !newPriceItem.name || !newPriceItem.price_with_vat) {
+      toast({
+        title: 'שגיאה',
+        description: 'יש למלא שם ומחיר',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSavingPriceItem(true);
+    try {
+      const priceWithVat = parseFloat(newPriceItem.price_with_vat);
+      const priceBeforeVat = newPriceItem.price_before_vat
+        ? parseFloat(newPriceItem.price_before_vat)
+        : priceWithVat / 1.17; // Default 17% VAT
+
+      const { data, error } = await supabase
+        .from('price_items')
+        .insert({
+          clinic_id: clinicId,
+          name: newPriceItem.name,
+          category: newPriceItem.category || 'כללי',
+          price_before_vat: priceBeforeVat,
+          price_with_vat: priceWithVat,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: 'הצלחה',
+        description: 'פריט החיוב נוסף בהצלחה',
+      });
+
+      // Refresh price items list
+      await fetchPriceItems();
+
+      // Add the new item to the visit
+      if (data) {
+        appendPriceItem({ item_id: data.id, quantity: 1 });
+      }
+
+      // Reset form and close dialog
+      setNewPriceItem({ name: '', category: '', price_before_vat: '', price_with_vat: '' });
+      setShowNewPriceItemDialog(false);
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingPriceItem(false);
+    }
   };
 
   const onSubmit = (data: VisitFormData) => {
@@ -627,11 +704,34 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
             <TabsContent value="billing" className="space-y-4 mt-4">
               <div className="flex justify-between items-center">
                 <Label>פריטי חיוב</Label>
-                <Button type="button" size="sm" onClick={() => appendPriceItem({ item_id: '', quantity: 1 })}>
-                  <Plus className="h-4 w-4 ml-2" />
-                  הוסף פריט
-                </Button>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => setShowNewPriceItemDialog(true)}>
+                    <PlusCircle className="h-4 w-4 ml-2" />
+                    צור פריט חדש
+                  </Button>
+                  <Button type="button" size="sm" onClick={() => appendPriceItem({ item_id: '', quantity: 1 })}>
+                    <Plus className="h-4 w-4 ml-2" />
+                    הוסף פריט קיים
+                  </Button>
+                </div>
               </div>
+
+              {/* הודעה אם אין פריטים */}
+              {priceItems.length === 0 && (
+                <div className="text-center py-4 text-muted-foreground bg-muted/30 rounded-lg">
+                  <p>אין פריטי חיוב במערכת</p>
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={() => setShowNewPriceItemDialog(true)}
+                    className="mt-2"
+                  >
+                    <PlusCircle className="h-4 w-4 ml-2" />
+                    צור פריט חיוב ראשון
+                  </Button>
+                </div>
+              )}
+
               {priceItemsFields.map((field, index) => (
                 <div key={field.id} className="flex gap-2 items-start">
                   <Button type="button" variant="ghost" size="icon" onClick={() => removePriceItem(index)}>
@@ -661,6 +761,23 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   />
                 </div>
               ))}
+
+              {/* סכום כולל */}
+              {priceItemsFields.length > 0 && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="flex justify-between items-center text-lg font-semibold">
+                    <span>סה״כ לחיוב:</span>
+                    <span>
+                      ₪{priceItemsFields.reduce((total, _, index) => {
+                        const itemId = watch(`price_items.${index}.item_id`);
+                        const quantity = watch(`price_items.${index}.quantity`) || 1;
+                        const item = priceItems.find(p => p.id === itemId);
+                        return total + (item?.price_with_vat || 0) * quantity;
+                      }, 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             {/* Follow-up */}
@@ -747,6 +864,99 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           </div>
         </form>
       </CardContent>
+
+      {/* Dialog for creating new price item */}
+      <Dialog open={showNewPriceItemDialog} onOpenChange={setShowNewPriceItemDialog}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>יצירת פריט חיוב חדש</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>שם הפריט *</Label>
+              <Input
+                value={newPriceItem.name}
+                onChange={(e) => setNewPriceItem(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="למשל: בדיקה כללית"
+                className="text-right"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>קטגוריה</Label>
+              <Select
+                value={newPriceItem.category}
+                onValueChange={(value) => setNewPriceItem(prev => ({ ...prev, category: value }))}
+              >
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="בחר קטגוריה" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="בדיקות">בדיקות</SelectItem>
+                  <SelectItem value="טיפולים">טיפולים</SelectItem>
+                  <SelectItem value="ניתוחים">ניתוחים</SelectItem>
+                  <SelectItem value="חיסונים">חיסונים</SelectItem>
+                  <SelectItem value="תרופות">תרופות</SelectItem>
+                  <SelectItem value="מעבדה">מעבדה</SelectItem>
+                  <SelectItem value="אשפוז">אשפוז</SelectItem>
+                  <SelectItem value="כללי">כללי</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>מחיר כולל מע״מ *</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={newPriceItem.price_with_vat}
+                    onChange={(e) => {
+                      const withVat = e.target.value;
+                      const beforeVat = withVat ? (parseFloat(withVat) / 1.17).toFixed(2) : '';
+                      setNewPriceItem(prev => ({
+                        ...prev,
+                        price_with_vat: withVat,
+                        price_before_vat: beforeVat,
+                      }));
+                    }}
+                    placeholder="0.00"
+                    className="text-right pr-8"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">₪</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>מחיר לפני מע״מ</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={newPriceItem.price_before_vat}
+                    onChange={(e) => setNewPriceItem(prev => ({ ...prev, price_before_vat: e.target.value }))}
+                    placeholder="0.00"
+                    className="text-right pr-8 bg-muted/30"
+                    readOnly
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">₪</span>
+                </div>
+                <p className="text-xs text-muted-foreground">מחושב אוטומטית (17% מע״מ)</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button onClick={handleCreatePriceItem} disabled={savingPriceItem} className="flex-1">
+                {savingPriceItem ? 'שומר...' : 'צור והוסף לביקור'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowNewPriceItemDialog(false)}>
+                ביטול
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

@@ -81,6 +81,11 @@ const ClientProfile = () => {
 
   // Pet dialog state
   const [petDialogOpen, setPetDialogOpen] = useState(false);
+  const [editingPet, setEditingPet] = useState<Pet | null>(null);
+
+  // Selected pet for sidebar display
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
+  const selectedPet = pets.find(p => p.id === selectedPetId) || pets[0] || null;
 
   // סוגי חיסונים
   const VACCINATION_TYPES = {
@@ -552,18 +557,36 @@ const ClientProfile = () => {
     if (!clinicId) return;
 
     try {
-      const { error } = await supabase
-        .from('pets')
-        .insert({ ...data, clinic_id: clinicId });
+      // Check if we're editing an existing pet or creating a new one
+      if (editingPet) {
+        // Update existing pet
+        const { error } = await supabase
+          .from('pets')
+          .update(data)
+          .eq('id', editingPet.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: 'הצלחה',
-        description: 'חיית המחמד נוספה בהצלחה',
-      });
+        toast({
+          title: 'הצלחה',
+          description: 'פרטי חיית המחמד עודכנו בהצלחה',
+        });
+      } else {
+        // Insert new pet
+        const { error } = await supabase
+          .from('pets')
+          .insert({ ...data, clinic_id: clinicId });
+
+        if (error) throw error;
+
+        toast({
+          title: 'הצלחה',
+          description: 'חיית המחמד נוספה בהצלחה',
+        });
+      }
 
       setPetDialogOpen(false);
+      setEditingPet(null);
       fetchClientData();
     } catch (error: any) {
       toast({
@@ -772,6 +795,87 @@ const ClientProfile = () => {
                 </Badge>
               </div>
 
+              {/* Selected Pet Info - Right after client contact info */}
+              {selectedPet && (
+                <>
+                  <Separator />
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2 flex-row-reverse">
+                      <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-lg font-bold text-white">
+                        {selectedPet.name.charAt(0)}
+                      </div>
+                      <div className="text-right flex-1">
+                        <p className="font-semibold text-orange-800">{selectedPet.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {selectedPet.species === 'dog' ? 'כלב' :
+                           selectedPet.species === 'cat' ? 'חתול' :
+                           selectedPet.species === 'bird' ? 'ציפור' :
+                           selectedPet.species === 'rabbit' ? 'ארנב' :
+                           selectedPet.species === 'hamster' ? 'אוגר' : selectedPet.species}
+                          {selectedPet.breed && ` - ${selectedPet.breed}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2 text-right">
+                      {/* מין */}
+                      <div className="flex justify-between items-center">
+                        <Badge variant="outline" className="bg-white text-xs">
+                          {selectedPet.sex === 'male' ? 'זכר' :
+                           selectedPet.sex === 'female' ? 'נקבה' : 'לא ידוע'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">מין</span>
+                      </div>
+
+                      {/* גיל */}
+                      <div className="flex justify-between items-center">
+                        <Badge variant="outline" className="bg-white text-xs">
+                          {selectedPet.birth_date ? (() => {
+                            const birthDate = new Date(selectedPet.birth_date);
+                            const now = new Date();
+                            const years = Math.floor((now.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+                            const months = Math.floor(((now.getTime() - birthDate.getTime()) % (365.25 * 24 * 60 * 60 * 1000)) / (30.44 * 24 * 60 * 60 * 1000));
+                            if (years > 0) return `${years} שנים`;
+                            return `${months} חודשים`;
+                          })() : 'לא ידוע'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">גיל</span>
+                      </div>
+
+                      {/* סטטוס עיקור */}
+                      <div className="flex justify-between items-center">
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${selectedPet.neuter_status === 'neutered' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white'}`}
+                        >
+                          {selectedPet.neuter_status === 'neutered' ? 'מעוקר/מסורס' :
+                           selectedPet.neuter_status === 'intact' ? 'לא מעוקר' : 'לא ידוע'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">עיקור</span>
+                      </div>
+
+                      {/* משקל */}
+                      {selectedPet.current_weight && (
+                        <div className="flex justify-between items-center">
+                          <Badge variant="outline" className="bg-white text-xs">
+                            {selectedPet.current_weight} ק״ג
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">משקל</span>
+                        </div>
+                      )}
+
+                      {/* סטטוס */}
+                      <div className="flex justify-between items-center pt-1 border-t border-orange-200">
+                        <Badge className={`text-xs ${selectedPet.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`}>
+                          {selectedPet.status === 'active' ? 'פעיל' : 'לא פעיל'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">סטטוס חיה</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
               {/* Quick Stats */}
               <Separator />
               <div className="space-y-3 pt-2">
@@ -838,7 +942,7 @@ const ClientProfile = () => {
                 </CardContent>
               </Card>
             ) : (
-              <Tabs defaultValue={pets[0]?.id} className="w-full">
+              <Tabs defaultValue={pets[0]?.id} className="w-full" onValueChange={(value) => setSelectedPetId(value)}>
                 <TabsList className="w-full h-auto gap-4 bg-transparent border-0 mb-6 flex flex-row-reverse justify-start">
                   {pets.map((pet) => (
                     <TabsTrigger
@@ -878,15 +982,15 @@ const ClientProfile = () => {
 
                 {pets.map((pet) => (
                   <TabsContent key={pet.id} value={pet.id} className="space-y-4 mt-6">
-                    {/* Sub-tabs for each pet */}
+                    {/* Sub-tabs for each pet - Orange theme */}
                     <Tabs defaultValue="visits" className="w-full" dir="rtl">
-                      <TabsList className="w-full grid grid-cols-6 h-auto bg-muted/50">
-                        <TabsTrigger value="details">פרטי החיה</TabsTrigger>
-                        <TabsTrigger value="metrics">מדדים</TabsTrigger>
-                        <TabsTrigger value="visits">ציר זמן</TabsTrigger>
-                        <TabsTrigger value="vaccinations">חיסונים</TabsTrigger>
-                        <TabsTrigger value="prescriptions">מרשמים</TabsTrigger>
-                        <TabsTrigger value="lab">מסמכים מעבדה</TabsTrigger>
+                      <TabsList className="w-full grid grid-cols-6 h-auto bg-orange-100 border-2 border-orange-300 rounded-lg p-1">
+                        <TabsTrigger value="details" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">פרטי החיה</TabsTrigger>
+                        <TabsTrigger value="metrics" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">מדדים</TabsTrigger>
+                        <TabsTrigger value="visits" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">ציר זמן</TabsTrigger>
+                        <TabsTrigger value="vaccinations" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">חיסונים</TabsTrigger>
+                        <TabsTrigger value="prescriptions" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">מרשמים</TabsTrigger>
+                        <TabsTrigger value="lab" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">מסמכים מעבדה</TabsTrigger>
                       </TabsList>
 
                       {/* Pet Details Tab */}
@@ -898,12 +1002,48 @@ const ClientProfile = () => {
                               <Button
                                 variant="default"
                                 size="sm"
-                                onClick={() => {
-                                  // Save logic will be added
-                                  toast({
-                                    title: 'הצלחה',
-                                    description: 'הפרטים נשמרו בהצלחה',
-                                  });
+                                onClick={async () => {
+                                  // Get form data from the form element
+                                  const form = document.getElementById(`pet-details-form-${pet.id}`) as HTMLFormElement;
+                                  if (!form) return;
+
+                                  const formData = new FormData(form);
+                                  const sexValue = formData.get(`sex-${pet.id}`) as string;
+                                  const neuterCheckbox = form.querySelector(`input[name="neuter-${pet.id}"]`) as HTMLInputElement;
+
+                                  const updateData = {
+                                    name: formData.get('name') as string || pet.name,
+                                    species: formData.get('species') as string || pet.species,
+                                    breed: formData.get('breed') as string || null,
+                                    sex: sexValue || pet.sex,
+                                    color_markings: formData.get('color_markings') as string || null,
+                                    birth_date: formData.get('birth_date') as string || null,
+                                    microchip_number: formData.get('microchip_number') as string || null,
+                                    license_number: formData.get('license_number') as string || null,
+                                    neuter_status: neuterCheckbox?.checked ? 'neutered' : (pet.neuter_status === 'neutered' ? 'neutered' : 'intact'),
+                                  };
+
+                                  try {
+                                    const { error } = await supabase
+                                      .from('pets')
+                                      .update(updateData)
+                                      .eq('id', pet.id);
+
+                                    if (error) throw error;
+
+                                    toast({
+                                      title: 'הצלחה',
+                                      description: 'פרטי החיה נשמרו בהצלחה',
+                                    });
+
+                                    fetchClientData();
+                                  } catch (error: any) {
+                                    toast({
+                                      title: 'שגיאה',
+                                      description: error.message,
+                                      variant: 'destructive',
+                                    });
+                                  }
                                 }}
                               >
                                 שמור שינויים
@@ -911,12 +1051,13 @@ const ClientProfile = () => {
                             </div>
                           </CardHeader>
                           <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-right">
+                            <form id={`pet-details-form-${pet.id}`} className="grid grid-cols-1 md:grid-cols-2 gap-6 text-right">
                               {/* שם החיה */}
                               <div>
                                 <label className="text-sm font-medium mb-2 block">שם החיה: *</label>
                                 <input
                                   type="text"
+                                  name="name"
                                   defaultValue={pet.name}
                                   className="w-full px-3 py-2 border rounded-md text-right"
                                   placeholder="שם החיה"
@@ -927,6 +1068,7 @@ const ClientProfile = () => {
                               <div>
                                 <label className="text-sm font-medium mb-2 block">סוג החיה:</label>
                                 <select
+                                  name="species"
                                   defaultValue={pet.species}
                                   className="w-full px-3 py-2 border rounded-md text-right"
                                 >
@@ -942,6 +1084,7 @@ const ClientProfile = () => {
                                 <label className="text-sm font-medium mb-2 block">גזע:</label>
                                 <input
                                   type="text"
+                                  name="breed"
                                   defaultValue={pet.breed || ''}
                                   className="w-full px-3 py-2 border rounded-md text-right"
                                   placeholder="גזע"
@@ -978,6 +1121,7 @@ const ClientProfile = () => {
                                 <label className="text-sm font-medium mb-2 block">צבע:</label>
                                 <input
                                   type="text"
+                                  name="color_markings"
                                   defaultValue={pet.color_markings || ''}
                                   className="w-full px-3 py-2 border rounded-md text-right"
                                   placeholder="צבע"
@@ -987,16 +1131,14 @@ const ClientProfile = () => {
                               {/* מעוקר/מסורס */}
                               <div>
                                 <label className="text-sm font-medium mb-2 block">מעוקר/מסורס:</label>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 items-center">
                                   <input
                                     type="checkbox"
+                                    name={`neuter-${pet.id}`}
+                                    defaultChecked={pet.neuter_status === 'neutered'}
                                     className="w-4 h-4"
                                   />
-                                  <span className="text-sm">בתאריך:</span>
-                                  <input
-                                    type="date"
-                                    className="flex-1 px-3 py-2 border rounded-md text-right"
-                                  />
+                                  <span className="text-sm">מעוקר/מסורס</span>
                                 </div>
                               </div>
 
@@ -1005,6 +1147,7 @@ const ClientProfile = () => {
                                 <label className="text-sm font-medium mb-2 block">תאריך לידה:</label>
                                 <input
                                   type="date"
+                                  name="birth_date"
                                   defaultValue={pet.birth_date || ''}
                                   className="w-full px-3 py-2 border rounded-md text-right"
                                 />
@@ -1015,33 +1158,16 @@ const ClientProfile = () => {
                                 )}
                               </div>
 
-                              {/* פטור מאגרה */}
-                              <div>
-                                <label className="text-sm font-medium mb-2 block">פטור מאגרה:</label>
-                                <select className="w-full px-3 py-2 border rounded-md text-right">
-                                  <option value="">בחר סיבה</option>
-                                  <option value="senior">גיל מבוגר</option>
-                                  <option value="disability">נכות</option>
-                                  <option value="other">אחר</option>
-                                </select>
-                              </div>
-
                               {/* מספר שבב */}
                               <div>
                                 <label className="text-sm font-medium mb-2 block">מספר שבב:</label>
-                                <div className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    defaultValue={pet.microchip_number || ''}
-                                    className="flex-1 px-3 py-2 border rounded-md text-right"
-                                    placeholder="מספר שבב"
-                                  />
-                                  <span className="text-sm whitespace-nowrap self-center">הוכנס בתאריך:</span>
-                                  <input
-                                    type="date"
-                                    className="px-3 py-2 border rounded-md text-right"
-                                  />
-                                </div>
+                                <input
+                                  type="text"
+                                  name="microchip_number"
+                                  defaultValue={pet.microchip_number || ''}
+                                  className="w-full px-3 py-2 border rounded-md text-right"
+                                  placeholder="מספר שבב"
+                                />
                               </div>
 
                               {/* מספר לוחית */}
@@ -1049,135 +1175,13 @@ const ClientProfile = () => {
                                 <label className="text-sm font-medium mb-2 block">מספר לוחית:</label>
                                 <input
                                   type="text"
+                                  name="license_number"
                                   defaultValue={pet.license_number || ''}
                                   className="w-full px-3 py-2 border rounded-md text-right"
                                   placeholder="מספר לוחית"
                                 />
                               </div>
-
-                              {/* מספר סגיר */}
-                              <div>
-                                <label className="text-sm font-medium mb-2 block">מספר סגיר:</label>
-                                <input
-                                  type="text"
-                                  className="w-full px-3 py-2 border rounded-md text-right"
-                                  placeholder="מספר סגיר"
-                                />
-                              </div>
-
-                              {/* סוג דם */}
-                              <div>
-                                <label className="text-sm font-medium mb-2 block">סוג דם:</label>
-                                <input
-                                  type="text"
-                                  className="w-full px-3 py-2 border rounded-md text-right"
-                                  placeholder="סוג דם"
-                                />
-                              </div>
-
-                              {/* מחירון */}
-                              <div>
-                                <label className="text-sm font-medium mb-2 block">מחירון:</label>
-                                <select className="w-full px-3 py-2 border rounded-md text-right">
-                                  <option value="">בחר מחירון</option>
-                                  <option value="standard">מחירון רגיל</option>
-                                  <option value="premium">מחירון פרימיום</option>
-                                </select>
-                              </div>
-
-                              {/* סוג מזון */}
-                              <div>
-                                <label className="text-sm font-medium mb-2 block">סוג מזון:</label>
-                                <input
-                                  type="text"
-                                  className="w-full px-3 py-2 border rounded-md text-right"
-                                  placeholder="סוג מזון"
-                                />
-                              </div>
-
-                              {/* הערות */}
-                              <div className="md:col-span-2">
-                                <label className="text-sm font-medium mb-2 block">הערות:</label>
-                                <textarea
-                                  maxLength={250}
-                                  rows={3}
-                                  className="w-full px-3 py-2 border rounded-md text-right resize-none"
-                                  placeholder="הערות"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">נותרו 250 תווים</p>
-                              </div>
-
-                              {/* מתפרצת */}
-                              <div className="md:col-span-2">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <input type="checkbox" className="w-4 h-4" />
-                                  <label className="text-sm font-medium">מתפרצת</label>
-                                </div>
-                                <textarea
-                                  maxLength={250}
-                                  rows={2}
-                                  className="w-full px-3 py-2 border rounded-md text-right resize-none"
-                                  placeholder="הערה מתפרצת"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">נותרו 250 תווים</p>
-                              </div>
-
-                              {/* רגישות */}
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <input type="checkbox" className="w-4 h-4" />
-                                  <label className="text-sm font-medium">רגישות</label>
-                                </div>
-                              </div>
-
-                              {/* חיה לא פעילה */}
-                              <div>
-                                <label className="text-sm font-medium mb-2 block">חיה לא פעילה:</label>
-                                <select className="w-full px-3 py-2 border rounded-md text-right">
-                                  <option value="">בחר סיבה</option>
-                                  <option value="deceased">נפטר</option>
-                                  <option value="sold">נמכר</option>
-                                  <option value="other">אחר</option>
-                                </select>
-                              </div>
-
-                              {/* תאריך אחרון לשליחת תיק חיה */}
-                              <div>
-                                <label className="text-sm font-medium mb-2 block">תאריך אחרון לשליחת תיק חיה:</label>
-                                <input
-                                  type="date"
-                                  className="w-full px-3 py-2 border rounded-md text-right"
-                                />
-                              </div>
-
-                              {/* לקוח מבוטח */}
-                              <div className="md:col-span-2">
-                                <div className="flex items-center gap-4 flex-row-reverse">
-                                  <div className="flex items-center gap-2">
-                                    <input type="checkbox" className="w-4 h-4" />
-                                    <label className="text-sm font-medium">לקוח מבוטח</label>
-                                  </div>
-                                  <div className="flex-1 flex items-center gap-2">
-                                    <span className="text-sm">שם הביטוח:</span>
-                                    <input
-                                      type="text"
-                                      className="flex-1 px-3 py-2 border rounded-md text-right"
-                                      placeholder="שם הביטוח"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* הועברה בעלות מ */}
-                              <div className="md:col-span-2">
-                                <label className="text-sm font-medium mb-2 block">הועברה בעלות מ:</label>
-                                <input
-                                  type="text"
-                                  className="w-full px-3 py-2 border rounded-md text-right"
-                                  placeholder="שם הבעלים הקודם"
-                                />
-                              </div>
-                            </div>
+                            </form>
                           </CardContent>
                         </Card>
                       </TabsContent>
