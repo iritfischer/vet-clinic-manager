@@ -19,6 +19,11 @@ import {
   Smartphone,
   Loader2,
   Tags,
+  Building2,
+  Upload,
+  Globe,
+  Phone,
+  Palette,
 } from 'lucide-react';
 import { useWhatsApp } from '@/hooks/useWhatsApp';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,6 +32,8 @@ import { setWebhookUrl, getWebhookSettings } from '@/lib/whatsappService';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { TagManagement } from '@/components/settings/TagManagement';
+import { useClinic } from '@/hooks/useClinic';
+import { supabase } from '@/integrations/supabase/client';
 
 const Settings = () => {
   const { toast } = useToast();
@@ -51,6 +58,18 @@ const Settings = () => {
   const [webhookStatus, setWebhookStatus] = useState<string | null>(null);
   const [allSettings, setAllSettings] = useState<any>(null);
 
+  // Clinic settings state
+  const { clinicId } = useClinic();
+  const [clinicName, setClinicName] = useState('');
+  const [clinicPhone, setClinicPhone] = useState('');
+  const [clinicWebsite, setClinicWebsite] = useState('');
+  const [clinicVetLicense, setClinicVetLicense] = useState('');
+  const [clinicLogo, setClinicLogo] = useState<string | null>(null);
+  const [primaryColor, setPrimaryColor] = useState('#E8833A');
+  const [clinicLoading, setClinicLoading] = useState(false);
+  const [savingClinic, setSavingClinic] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
   // MFA state
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
@@ -72,6 +91,110 @@ const Settings = () => {
     };
     loadMFAStatus();
   }, []);
+
+  // Load clinic settings
+  useEffect(() => {
+    const loadClinicSettings = async () => {
+      if (!clinicId) return;
+      setClinicLoading(true);
+      try {
+        const { data: clinic, error } = await supabase
+          .from('clinics')
+          .select('*')
+          .eq('id', clinicId)
+          .single();
+
+        if (error) throw error;
+
+        if (clinic) {
+          setClinicName(clinic.name || '');
+          setClinicPhone(clinic.phone || '');
+          setClinicLogo(clinic.logo_url || null);
+          const settings = clinic.settings as Record<string, any> || {};
+          setClinicWebsite(settings.website || '');
+          setClinicVetLicense(settings.vetLicense || '');
+          setPrimaryColor(settings.primaryColor || '#E8833A');
+        }
+      } catch (error) {
+        console.error('Error loading clinic settings:', error);
+      } finally {
+        setClinicLoading(false);
+      }
+    };
+    loadClinicSettings();
+  }, [clinicId]);
+
+  // Handle logo upload
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !clinicId) return;
+
+    setUploadingLogo(true);
+    try {
+      // Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${clinicId}-logo.${fileExt}`;
+      const filePath = `clinic-logos/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('sum')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('sum')
+        .getPublicUrl(filePath);
+
+      setClinicLogo(urlData.publicUrl);
+      toast({ title: 'הצלחה', description: 'הלוגו הועלה בהצלחה' });
+    } catch (error: any) {
+      console.error('Error uploading logo:', error);
+      toast({ title: 'שגיאה', description: 'שגיאה בהעלאת הלוגו', variant: 'destructive' });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  // Save clinic settings
+  const handleSaveClinicSettings = async () => {
+    if (!clinicId) return;
+    setSavingClinic(true);
+    try {
+      // First get current settings to preserve whatsapp config
+      const { data: currentClinic } = await supabase
+        .from('clinics')
+        .select('settings')
+        .eq('id', clinicId)
+        .single();
+
+      const currentSettings = (currentClinic?.settings as Record<string, any>) || {};
+
+      const { error } = await supabase
+        .from('clinics')
+        .update({
+          name: clinicName,
+          phone: clinicPhone,
+          logo_url: clinicLogo,
+          settings: {
+            ...currentSettings,
+            website: clinicWebsite,
+            vetLicense: clinicVetLicense,
+            primaryColor: primaryColor,
+          },
+        })
+        .eq('id', clinicId);
+
+      if (error) throw error;
+      toast({ title: 'הצלחה', description: 'הגדרות המרפאה נשמרו בהצלחה' });
+    } catch (error: any) {
+      console.error('Error saving clinic settings:', error);
+      toast({ title: 'שגיאה', description: 'שגיאה בשמירת ההגדרות', variant: 'destructive' });
+    } finally {
+      setSavingClinic(false);
+    }
+  };
 
   const handleEnableMFA = async () => {
     setMfaLoading(true);
@@ -245,8 +368,12 @@ const Settings = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="whatsapp" className="space-y-6" dir="rtl">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs defaultValue="clinic" className="space-y-6" dir="rtl">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="clinic" className="flex items-center gap-2 flex-row-reverse">
+              <Building2 className="h-4 w-4" />
+              מרפאה
+            </TabsTrigger>
             <TabsTrigger value="whatsapp" className="flex items-center gap-2 flex-row-reverse">
               <MessageCircle className="h-4 w-4" />
               WhatsApp
@@ -260,6 +387,180 @@ const Settings = () => {
               אבטחה
             </TabsTrigger>
           </TabsList>
+
+          {/* Clinic Tab */}
+          <TabsContent value="clinic" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Building2 className="h-6 w-6 text-orange-600" />
+                  </div>
+                  <div>
+                    <CardTitle>פרטי המרפאה</CardTitle>
+                    <CardDescription>
+                      הגדר את פרטי המרפאה שיופיעו במסמכים ובסיכומי ביקור
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {clinicLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <>
+                    {/* Logo Upload */}
+                    <div className="space-y-3">
+                      <Label>לוגו המרפאה</Label>
+                      <div className="flex items-center gap-4">
+                        {clinicLogo ? (
+                          <img
+                            src={clinicLogo}
+                            alt="לוגו המרפאה"
+                            className="w-24 h-24 object-contain border rounded-lg bg-white p-2"
+                          />
+                        ) : (
+                          <div className="w-24 h-24 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50">
+                            <Upload className="h-8 w-8 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                            id="logo-upload"
+                          />
+                          <Button
+                            variant="outline"
+                            onClick={() => document.getElementById('logo-upload')?.click()}
+                            disabled={uploadingLogo}
+                          >
+                            {uploadingLogo ? (
+                              <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                            ) : (
+                              <Upload className="h-4 w-4 ml-2" />
+                            )}
+                            {clinicLogo ? 'החלף לוגו' : 'העלה לוגו'}
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            מומלץ: תמונה מרובעת, מינימום 200x200 פיקסלים
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Clinic Details */}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="clinicName">שם המרפאה / הרופא</Label>
+                        <Input
+                          id="clinicName"
+                          placeholder="ד״ר ישראל ישראלי"
+                          value={clinicName}
+                          onChange={(e) => setClinicName(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="clinicVetLicense">מספר רישיון וטרינר</Label>
+                        <Input
+                          id="clinicVetLicense"
+                          placeholder="1234"
+                          value={clinicVetLicense}
+                          onChange={(e) => setClinicVetLicense(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="clinicPhone">
+                          <Phone className="h-4 w-4 inline ml-1" />
+                          טלפון
+                        </Label>
+                        <Input
+                          id="clinicPhone"
+                          placeholder="054-1234567"
+                          value={clinicPhone}
+                          onChange={(e) => setClinicPhone(e.target.value)}
+                          dir="ltr"
+                          className="text-right"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="clinicWebsite">
+                          <Globe className="h-4 w-4 inline ml-1" />
+                          אתר אינטרנט
+                        </Label>
+                        <Input
+                          id="clinicWebsite"
+                          placeholder="www.example.com"
+                          value={clinicWebsite}
+                          onChange={(e) => setClinicWebsite(e.target.value)}
+                          dir="ltr"
+                          className="text-right"
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Color Picker */}
+                    <div className="space-y-3">
+                      <Label>
+                        <Palette className="h-4 w-4 inline ml-1" />
+                        צבע ראשי למסמכים
+                      </Label>
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="color"
+                          value={primaryColor}
+                          onChange={(e) => setPrimaryColor(e.target.value)}
+                          className="w-16 h-10 rounded border cursor-pointer"
+                        />
+                        <Input
+                          value={primaryColor}
+                          onChange={(e) => setPrimaryColor(e.target.value)}
+                          className="w-32"
+                          dir="ltr"
+                        />
+                        <div
+                          className="px-4 py-2 rounded text-white font-medium"
+                          style={{ backgroundColor: primaryColor }}
+                        >
+                          תצוגה מקדימה
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        צבע זה ישמש ככותרות וכפסים בסיכומי ביקור
+                      </p>
+                    </div>
+
+                    <Separator />
+
+                    {/* Save Button */}
+                    <Button
+                      onClick={handleSaveClinicSettings}
+                      disabled={savingClinic}
+                      className="w-full"
+                    >
+                      {savingClinic ? (
+                        <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 ml-2" />
+                      )}
+                      שמור הגדרות מרפאה
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* WhatsApp Tab */}
           <TabsContent value="whatsapp" className="space-y-6">

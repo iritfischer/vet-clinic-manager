@@ -30,6 +30,10 @@ export interface VisitSummaryData {
   clinicLogo?: string;
   clinicPhone?: string;
   clinicAddress?: string;
+  clinicWebsite?: string;
+  clinicVetLicense?: string;
+  clinicEmail?: string;
+  primaryColor?: string;
 
   // Visit info
   visitDate: string;

@@ -149,11 +149,18 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         console.error('Error fetching visit charges:', error);
       }
 
+      // Get clinic settings for additional fields
+      const clinicSettings = (clinic.settings as Record<string, any>) || {};
+
       setSummaryData({
         clinicName: clinic.name,
         clinicLogo: clinic.logo_url || undefined,
         clinicPhone: clinic.phone || undefined,
         clinicAddress: clinic.address || undefined,
+        clinicWebsite: clinicSettings.website || undefined,
+        clinicVetLicense: clinicSettings.vetLicense || undefined,
+        clinicEmail: clinic.email || undefined,
+        primaryColor: clinicSettings.primaryColor || '#E8833A',
         visitDate: format(new Date(visit.visit_date), 'dd/MM/yyyy HH:mm', { locale: he }),
         visitType: visit.visit_type,
         petName: visit.pets?.name || 'לא ידוע',

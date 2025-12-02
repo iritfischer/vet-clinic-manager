@@ -11,6 +11,23 @@ export const generateVisitPdfFromElement = async (element: HTMLElement): Promise
     useCORS: true, // Allow cross-origin images
     backgroundColor: '#ffffff',
     logging: false,
+    scrollX: 0,
+    scrollY: -window.scrollY,
+    windowWidth: element.scrollWidth,
+    windowHeight: element.scrollHeight,
+    width: element.scrollWidth,
+    height: element.scrollHeight,
+    onclone: (_clonedDoc, clonedElement) => {
+      // Ensure the cloned element has no overflow issues
+      clonedElement.style.overflow = 'visible';
+      clonedElement.style.height = 'auto';
+      // Make sure parent containers don't clip content
+      let parent = clonedElement.parentElement;
+      while (parent) {
+        parent.style.overflow = 'visible';
+        parent = parent.parentElement;
+      }
+    },
   });
 
   // Calculate dimensions for A4 page
@@ -27,7 +44,7 @@ export const generateVisitPdfFromElement = async (element: HTMLElement): Promise
     // Single page
     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
   } else {
-    // Multiple pages
+    // Multiple pages - simple split (header/footer won't repeat)
     let heightLeft = imgHeight;
     let position = 0;
 
