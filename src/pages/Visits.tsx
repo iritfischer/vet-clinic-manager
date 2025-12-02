@@ -60,8 +60,8 @@ const Visits = () => {
         .from('visits')
         .select(`
           *,
-          clients:client_id(*),
-          pets:pet_id(*)
+          clients:client_id(id, first_name, last_name, phone_primary),
+          pets:pet_id(id, name, species)
         `)
         .eq('clinic_id', clinicId)
         .order('visit_date', { ascending: false });
@@ -113,7 +113,6 @@ const Visits = () => {
       let visitId: string;
 
       if (editingVisit) {
-        console.log('DEBUG - About to UPDATE with visitData:', visitData);
         const { error } = await supabase
           .from('visits')
           .update(visitData)
@@ -148,20 +147,13 @@ const Visits = () => {
           status: visitData.status,
         };
 
-        console.log('DEBUG - About to INSERT. dataToInsert:', JSON.stringify(dataToInsert, null, 2));
-        console.log('DEBUG - Keys in dataToInsert:', Object.keys(dataToInsert));
-
         const { data: newVisit, error } = await supabase
           .from('visits')
           .insert(dataToInsert)
           .select()
           .single();
 
-        if (error) {
-          console.error('DEBUG - INSERT ERROR - Full error object:', JSON.stringify(error, null, 2));
-          alert('Supabase Error: ' + error.message + '\n\nDetails: ' + error.details + '\n\nHint: ' + error.hint);
-          throw error;
-        }
+        if (error) throw error;
         visitId = newVisit.id;
         toast({ title: 'הביקור נוסף בהצלחה' });
       }

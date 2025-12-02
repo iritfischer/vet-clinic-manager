@@ -18,10 +18,10 @@ export const useClinic = () => {
     }
 
     try {
-      // First get the clinic_id from profiles
+      // Fetch profile with clinic data in a single query using JOIN
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('clinic_id')
+        .select('clinic_id, clinics(*)')
         .eq('id', user.id)
         .single();
 
@@ -32,15 +32,8 @@ export const useClinic = () => {
 
       setClinicId(profileData.clinic_id);
 
-      // Then fetch the full clinic data
-      const { data: clinicData, error: clinicError } = await supabase
-        .from('clinics')
-        .select('*')
-        .eq('id', profileData.clinic_id)
-        .single();
-
-      if (!clinicError && clinicData) {
-        setClinic(clinicData);
+      if (profileData.clinics) {
+        setClinic(profileData.clinics as Clinic);
       }
     } catch (error) {
       console.error('Error fetching clinic:', error);

@@ -45,8 +45,8 @@ const Appointments = () => {
         .from('appointments')
         .select(`
           *,
-          clients:client_id(*),
-          pets:pet_id(*)
+          clients:client_id(id, first_name, last_name),
+          pets:pet_id(id, name)
         `)
         .eq('clinic_id', clinicId)
         .order('start_time', { ascending: true });

@@ -51,7 +51,7 @@ const appointmentSchema = z.object({
   pet_id: z.string().optional().or(z.literal('')),
   appointment_type: z.string().min(1, 'יש לבחור סוג תור').max(100),
   start_time: z.string().min(1, 'יש להזין תאריך ושעת התחלה'),
-  end_time: z.string().min(1, 'יש להזין תאריך ושעת סיום'),
+  duration: z.number().min(5, 'אורך התור צריך להיות לפחות 5 דקות').max(480, 'אורך התור לא יכול לעלות על 8 שעות'),
   status: z.enum(['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show']),
   notes: z.string().max(1000).optional().or(z.literal('')),
 });
@@ -89,7 +89,7 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
       pet_id: '',
       appointment_type: '',
       start_time: '',
-      end_time: '',
+      duration: 30,
       status: 'scheduled',
       notes: '',
     },
@@ -113,17 +113,19 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
     if (appointment) {
       const startDate = new Date(appointment.start_time);
       const endDate = new Date(appointment.end_time);
-      
+      // חישוב אורך התור בדקות
+      const durationMinutes = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60));
+
       reset({
         client_id: appointment.client_id || '',
         pet_id: appointment.pet_id || '',
         appointment_type: appointment.appointment_type,
         start_time: startDate.toISOString().slice(0, 16),
-        end_time: endDate.toISOString().slice(0, 16),
+        duration: durationMinutes || 30,
         status: (appointment.status as any) || 'scheduled',
         notes: appointment.notes || '',
       });
-      
+
       if (appointment.client_id) {
         setSelectedClientId(appointment.client_id);
       }
@@ -133,7 +135,7 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
         pet_id: '',
         appointment_type: '',
         start_time: '',
-        end_time: '',
+        duration: 30,
         status: 'scheduled',
         notes: '',
       });
@@ -169,7 +171,18 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
   };
 
   const onSubmit = (data: AppointmentFormData) => {
-    onSave(data);
+    // חישוב זמן סיום על בסיס שעת התחלה + אורך התור
+    const startDate = new Date(data.start_time);
+    const endDate = new Date(startDate.getTime() + data.duration * 60 * 1000);
+
+    // הסרת duration והוספת end_time לשליחה ל-API
+    const { duration, ...restData } = data;
+    const submitData = {
+      ...restData,
+      end_time: endDate.toISOString().slice(0, 16),
+    };
+
+    onSave(submitData as any);
     reset();
     setSelectedClientId('');
   };
@@ -389,14 +402,41 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_time">תאריך ושעת סיום *</Label>
-              <Input
-                id="end_time"
-                type="datetime-local"
-                {...register('end_time')}
-              />
-              {errors.end_time && (
-                <p className="text-sm text-destructive">{errors.end_time.message}</p>
+              <Label htmlFor="duration">אורך התור (דקות) *</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={[15, 30, 45, 60, 90, 120].includes(watch('duration') || 0) ? String(watch('duration')) : 'custom'}
+                  onValueChange={(value) => {
+                    if (value !== 'custom') {
+                      setValue('duration', Number(value));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1 text-right">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 דקות</SelectItem>
+                    <SelectItem value="30">30 דקות</SelectItem>
+                    <SelectItem value="45">45 דקות</SelectItem>
+                    <SelectItem value="60">שעה</SelectItem>
+                    <SelectItem value="90">שעה וחצי</SelectItem>
+                    <SelectItem value="120">שעתיים</SelectItem>
+                    <SelectItem value="custom">מותאם אישית</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min="5"
+                  max="480"
+                  value={watch('duration') || 30}
+                  onChange={(e) => setValue('duration', Number(e.target.value) || 30)}
+                  className="w-20 text-center"
+                  placeholder="דקות"
+                />
+              </div>
+              {errors.duration && (
+                <p className="text-sm text-destructive">{errors.duration.message}</p>
               )}
             </div>
           </div>

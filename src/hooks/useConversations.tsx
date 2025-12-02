@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { Conversation, ConversationFilter, WhatsAppMessage, Client, Lead } from '@/types/leads';
@@ -101,7 +101,11 @@ export const useConversations = () => {
     loadData();
   }, [fetchMessages, fetchClients, fetchLeads]);
 
-  // Subscribe to realtime updates
+  // Debounced refresh refs
+  const messagesDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const leadsDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Subscribe to realtime updates with debounce
   useEffect(() => {
     if (!clinicId) return;
 
@@ -116,8 +120,13 @@ export const useConversations = () => {
           filter: `clinic_id=eq.${clinicId}`,
         },
         () => {
-          // Refresh messages on any change
-          fetchMessages();
+          // Debounce messages refresh to avoid cascade
+          if (messagesDebounceRef.current) {
+            clearTimeout(messagesDebounceRef.current);
+          }
+          messagesDebounceRef.current = setTimeout(() => {
+            fetchMessages();
+          }, 500);
         }
       )
       .on(
@@ -129,14 +138,21 @@ export const useConversations = () => {
           filter: `clinic_id=eq.${clinicId}`,
         },
         () => {
-          // Refresh leads on any change
-          fetchLeads();
+          // Debounce leads refresh to avoid cascade
+          if (leadsDebounceRef.current) {
+            clearTimeout(leadsDebounceRef.current);
+          }
+          leadsDebounceRef.current = setTimeout(() => {
+            fetchLeads();
+          }, 500);
         }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
+      if (messagesDebounceRef.current) clearTimeout(messagesDebounceRef.current);
+      if (leadsDebounceRef.current) clearTimeout(leadsDebounceRef.current);
     };
   }, [clinicId, fetchMessages, fetchLeads]);
 

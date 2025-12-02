@@ -57,12 +57,14 @@ const Dashboard = () => {
         const weekStart = startOfWeek(today, { weekStartsOn: 0 });
         const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
 
-        // Fetch all data in parallel
+        // Fetch all data in parallel - use COUNT queries instead of fetching all data
         const [
           appointmentsTodayResult,
           pendingAppointmentsResult,
           clientsResult,
-          petsResult,
+          totalPetsResult,
+          dogsResult,
+          catsResult,
           visitsResult,
           upcomingResult,
           remindersResult,
@@ -70,7 +72,7 @@ const Dashboard = () => {
           // Today's appointments
           supabase
             .from('appointments')
-            .select('id', { count: 'exact' })
+            .select('id', { count: 'exact', head: true })
             .eq('clinic_id', clinicId)
             .gte('start_time', startOfDay(today).toISOString())
             .lte('start_time', endOfDay(today).toISOString()),
@@ -78,7 +80,7 @@ const Dashboard = () => {
           // Pending appointments today
           supabase
             .from('appointments')
-            .select('id', { count: 'exact' })
+            .select('id', { count: 'exact', head: true })
             .eq('clinic_id', clinicId)
             .eq('status', 'pending')
             .gte('start_time', startOfDay(today).toISOString())
@@ -87,20 +89,34 @@ const Dashboard = () => {
           // Active clients
           supabase
             .from('clients')
-            .select('id', { count: 'exact' })
+            .select('id', { count: 'exact', head: true })
             .eq('clinic_id', clinicId)
             .eq('status', 'active'),
 
-          // Pets with species breakdown
+          // Total pets count
           supabase
             .from('pets')
-            .select('id, species')
+            .select('id', { count: 'exact', head: true })
             .eq('clinic_id', clinicId),
+
+          // Dogs count - count in DB instead of fetching all
+          supabase
+            .from('pets')
+            .select('id', { count: 'exact', head: true })
+            .eq('clinic_id', clinicId)
+            .in('species', ['dog', 'כלב']),
+
+          // Cats count - count in DB instead of fetching all
+          supabase
+            .from('pets')
+            .select('id', { count: 'exact', head: true })
+            .eq('clinic_id', clinicId)
+            .in('species', ['cat', 'חתול']),
 
           // Visits this week
           supabase
             .from('visits')
-            .select('id', { count: 'exact' })
+            .select('id', { count: 'exact', head: true })
             .eq('clinic_id', clinicId)
             .gte('visit_date', weekStart.toISOString())
             .lte('visit_date', weekEnd.toISOString()),
@@ -137,16 +153,14 @@ const Dashboard = () => {
             .limit(5),
         ]);
 
-        // Calculate pet species breakdown
-        const pets = petsResult.data || [];
-        const dogsCount = pets.filter(p => p.species === 'dog' || p.species === 'כלב').length;
-        const catsCount = pets.filter(p => p.species === 'cat' || p.species === 'חתול').length;
+        const dogsCount = dogsResult.count || 0;
+        const catsCount = catsResult.count || 0;
 
         setStats({
           appointmentsToday: appointmentsTodayResult.count || 0,
           pendingAppointments: pendingAppointmentsResult.count || 0,
           activeClients: clientsResult.count || 0,
-          totalPets: pets.length,
+          totalPets: totalPetsResult.count || 0,
           dogsCount,
           catsCount,
           visitsThisWeek: visitsResult.count || 0,

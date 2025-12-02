@@ -104,34 +104,6 @@ export const checkWhatsAppStatus = async (
   }
 };
 
-// Get QR code for authorization
-export const getWhatsAppQR = async (
-  config: WhatsAppConfig
-): Promise<{ qrCode?: string; error?: string }> => {
-  if (!config.instanceId || !config.apiToken) {
-    return { error: 'פרטי החיבור חסרים' };
-  }
-
-  try {
-    const response = await fetch(
-      `${buildApiUrl(config.instanceId, 'qr')}/${config.apiToken}`,
-      {
-        method: 'GET',
-      }
-    );
-
-    const data = await response.json();
-
-    if (response.ok && data.message) {
-      return { qrCode: data.message };
-    } else {
-      return { error: data.message || 'לא ניתן לקבל QR' };
-    }
-  } catch (error: any) {
-    return { error: error.message || 'שגיאת רשת' };
-  }
-};
-
 // Set webhook URL for receiving incoming messages
 export const setWebhookUrl = async (
   config: WhatsAppConfig,
@@ -207,8 +179,6 @@ export const getWebhookSettings = async (
     );
 
     const data = await response.json();
-    console.log('Green API getSettings response:', data);
-
     if (response.ok) {
       return {
         webhookUrl: data.webhookUrl,
@@ -345,78 +315,6 @@ export interface ChatHistoryMessage {
   senderId?: string;
   senderName?: string;
 }
-
-// Get all chats (conversations list)
-export const getChats = async (
-  config: WhatsAppConfig
-): Promise<{ chatId: string; name: string; lastMessageTime: number }[]> => {
-  if (!config.isEnabled || !config.instanceId || !config.apiToken) {
-    return [];
-  }
-
-  try {
-    const response = await fetch(
-      `${buildApiUrl(config.instanceId, 'getChats')}/${config.apiToken}`,
-      {
-        method: 'GET',
-      }
-    );
-
-    const data = await response.json();
-
-    if (response.ok && Array.isArray(data)) {
-      // Filter only personal chats (not groups)
-      return data
-        .filter((chat: any) => chat.id?.endsWith('@c.us'))
-        .map((chat: any) => ({
-          chatId: chat.id,
-          name: chat.name || extractPhoneFromChatId(chat.id),
-          lastMessageTime: chat.lastMessageTime || 0,
-        }));
-    }
-    return [];
-  } catch (error: any) {
-    console.error('Error getting chats:', error);
-    return [];
-  }
-};
-
-// Get chat history (messages for a specific chat)
-export const getChatHistory = async (
-  config: WhatsAppConfig,
-  chatId: string,
-  count: number = 100
-): Promise<ChatHistoryMessage[]> => {
-  if (!config.isEnabled || !config.instanceId || !config.apiToken) {
-    return [];
-  }
-
-  try {
-    const response = await fetch(
-      `${buildApiUrl(config.instanceId, 'getChatHistory')}/${config.apiToken}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          chatId,
-          count,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (response.ok && Array.isArray(data)) {
-      return data;
-    }
-    return [];
-  } catch (error: any) {
-    console.error('Error getting chat history:', error);
-    return [];
-  }
-};
 
 // Get last incoming messages across all chats
 export const getLastIncomingMessages = async (
