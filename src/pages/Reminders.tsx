@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
@@ -27,13 +27,15 @@ import { format, isToday, isTomorrow, isPast, addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { useWhatsApp } from '@/hooks/useWhatsApp';
 import { messageTemplates } from '@/lib/whatsappService';
+import { useTagsByCategory } from '@/hooks/useTags';
 
 type Reminder = Tables<'reminders'> & {
   clients?: Tables<'clients'> | null;
   pets?: Tables<'pets'> | null;
 };
 
-const reminderTypeLabels: Record<string, string> = {
+// Fallback labels for backward compatibility
+const reminderTypeFallbackLabels: Record<string, string> = {
   follow_up: 'בדיקת מעקב',
   vaccination: 'חיסון',
   medication: 'תרופות',
@@ -49,6 +51,17 @@ const Reminders = () => {
   const { clinicId, clinic } = useClinic();
   const { toast } = useToast();
   const { sendMessage, isEnabled: whatsappEnabled, isConfigured: whatsappConfigured } = useWhatsApp();
+  const { getTagLabel } = useTagsByCategory('reminder_type');
+
+  // Get label for reminder type - use tags if available, fallback to hardcoded
+  const getReminderTypeLabel = useCallback((type: string): string => {
+    const tagLabel = getTagLabel(type);
+    // If getTagLabel returns the same value (no tag found), use fallback
+    if (tagLabel === type && reminderTypeFallbackLabels[type]) {
+      return reminderTypeFallbackLabels[type];
+    }
+    return tagLabel;
+  }, [getTagLabel]);
 
   useEffect(() => {
     if (clinicId) {
@@ -112,7 +125,7 @@ const Reminders = () => {
           .update({ status: 'completed' })
           .eq('client_id', reminder.client_id)
           .eq('pet_id', reminder.pet_id)
-          .ilike('appointment_type', `%${reminderTypeLabels[reminder.reminder_type] || reminder.reminder_type}%`)
+          .ilike('appointment_type', `%${getReminderTypeLabel(reminder.reminder_type)}%`)
           .eq('status', 'scheduled');
       }
 
@@ -176,14 +189,14 @@ const Reminders = () => {
       message = messageTemplates.vaccinationReminder(
         clinicName,
         petName,
-        reminder.notes || reminderTypeLabels[reminder.reminder_type],
+        reminder.notes || getReminderTypeLabel(reminder.reminder_type),
         dueDate
       );
     } else {
       message = messageTemplates.generalReminder(
         clinicName,
         petName,
-        `${reminderTypeLabels[reminder.reminder_type] || reminder.reminder_type} בתאריך ${dueDate}${reminder.notes ? `\n${reminder.notes}` : ''}`
+        `${getReminderTypeLabel(reminder.reminder_type)} בתאריך ${dueDate}${reminder.notes ? `\n${reminder.notes}` : ''}`
       );
     }
 
@@ -312,7 +325,7 @@ const Reminders = () => {
                   <TableRow key={reminder.id}>
                     <TableCell>
                       <span className="text-lg ml-2">{getReminderTypeIcon(reminder.reminder_type)}</span>
-                      {reminderTypeLabels[reminder.reminder_type] || reminder.reminder_type}
+                      {getReminderTypeLabel(reminder.reminder_type)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

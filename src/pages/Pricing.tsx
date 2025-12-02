@@ -9,6 +9,7 @@ import { PriceItemsTable } from '@/components/pricing/PriceItemsTable';
 import { PriceItemDialog } from '@/components/pricing/PriceItemDialog';
 import { useToast } from '@/hooks/use-toast';
 import { TableToolbar } from '@/components/shared/TableToolbar';
+import { useTagsByCategory } from '@/hooks/useTags';
 
 type PriceItem = Tables<'price_items'>;
 
@@ -21,6 +22,16 @@ const Pricing = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const { clinicId } = useClinic();
   const { toast } = useToast();
+  const { tags: categoryTags } = useTagsByCategory('price_category');
+
+  // Build category filter options from tags
+  const categoryFilterOptions = useMemo(() => {
+    const options = [{ value: 'all', label: 'כל הקטגוריות' }];
+    categoryTags.forEach(tag => {
+      options.push({ value: tag.value, label: tag.label });
+    });
+    return options;
+  }, [categoryTags]);
 
   // Filter items based on search and category
   const filteredItems = useMemo(() => {
@@ -157,21 +168,7 @@ const Pricing = () => {
                 {
                   key: 'category',
                   label: 'קטגוריה',
-                  options: [
-                    { value: 'all', label: 'כל הקטגוריות' },
-                    { value: 'vaccine', label: 'חיסונים' },
-                    { value: 'medication', label: 'תרופות' },
-                    { value: 'procedure', label: 'פרוצדורות' },
-                    { value: 'consultation', label: 'ייעוץ' },
-                    { value: 'surgery', label: 'ניתוחים' },
-                    { value: 'lab', label: 'מעבדה' },
-                    { value: 'imaging', label: 'הדמיה' },
-                    { value: 'hospitalization', label: 'אשפוז' },
-                    { value: 'grooming', label: 'טיפוח' },
-                    { value: 'food', label: 'מזון' },
-                    { value: 'supplies', label: 'ציוד' },
-                    { value: 'other', label: 'אחר' },
-                  ],
+                  options: categoryFilterOptions,
                   value: categoryFilter,
                   onChange: setCategoryFilter,
                 },

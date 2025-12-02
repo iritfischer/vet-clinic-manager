@@ -18,15 +18,9 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tables } from '@/integrations/supabase/types';
+import { TagInput } from '@/components/shared/TagInput';
 
 type PriceItem = Tables<'price_items'>;
 
@@ -47,17 +41,6 @@ interface PriceItemDialogProps {
   onSave: (data: any) => void;
   item: PriceItem | null;
 }
-
-const categories = [
-  { value: 'consultation', label: 'ייעוץ' },
-  { value: 'surgery', label: 'ניתוחים' },
-  { value: 'vaccination', label: 'חיסונים' },
-  { value: 'medication', label: 'תרופות' },
-  { value: 'treatment', label: 'טיפולים' },
-  { value: 'diagnostic', label: 'אבחון' },
-  { value: 'hospitalization', label: 'אשפוז' },
-  { value: 'other', label: 'אחר' },
-];
 
 export const PriceItemDialog = ({ open, onClose, onSave, item }: PriceItemDialogProps) => {
   const form = useForm<PriceItemFormData>({
@@ -155,20 +138,16 @@ export const PriceItemDialog = ({ open, onClose, onSave, item }: PriceItemDialog
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>קטגוריה</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="בחר קטגוריה" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <TagInput
+                      category="price_category"
+                      value={field.value?.split(',').filter(Boolean) || []}
+                      onChange={(values) => field.onChange(Array.isArray(values) ? values.join(',') : values)}
+                      placeholder="בחר קטגוריה"
+                      allowCreate={true}
+                      multiple={true}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

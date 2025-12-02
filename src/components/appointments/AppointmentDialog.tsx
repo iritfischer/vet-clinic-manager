@@ -37,8 +37,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { useToast } from '@/hooks/use-toast';
 import { ClientDialog, ClientFormData } from '@/components/clients/ClientDialog';
+import { PetDialog } from '@/components/pets/PetDialog';
 import { Plus, Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TagInput } from '@/components/shared/TagInput';
 
 type Appointment = Tables<'appointments'>;
 type Client = Tables<'clients'>;
@@ -70,6 +72,7 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
   const [pets, setPets] = useState<Pet[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [petDialogOpen, setPetDialogOpen] = useState(false);
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState('');
 
@@ -201,6 +204,35 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
     }
   };
 
+  const handleSavePet = async (petData: any) => {
+    if (!clinicId || !selectedClientId) return;
+
+    try {
+      const { data: newPet, error } = await supabase
+        .from('pets')
+        .insert({ ...petData, clinic_id: clinicId, client_id: selectedClientId })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({ title: 'חיית המחמד נוספה בהצלחה' });
+      setPetDialogOpen(false);
+
+      // Refresh pets list and auto-select the new pet
+      await fetchPets(selectedClientId);
+      if (newPet) {
+        setValue('pet_id', newPet.id);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
@@ -298,32 +330,46 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
 
           <div className="space-y-2">
             <Label htmlFor="pet_id">חיית מחמד</Label>
-            <Select
-              value={watch('pet_id') || 'none'}
-              onValueChange={(value) => setValue('pet_id', value === 'none' ? '' : value)}
-              disabled={!selectedClientId}
-            >
-              <SelectTrigger className="text-right">
-                <SelectValue placeholder="בחר חיית מחמד (אופציונלי)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">ללא חיית מחמד</SelectItem>
-                {pets.map((pet) => (
-                  <SelectItem key={pet.id} value={pet.id}>
-                    {pet.name} ({pet.species})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select
+                value={watch('pet_id') || 'none'}
+                onValueChange={(value) => setValue('pet_id', value === 'none' ? '' : value)}
+                disabled={!selectedClientId}
+              >
+                <SelectTrigger className="flex-1 text-right">
+                  <SelectValue placeholder="בחר חיית מחמד (אופציונלי)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">ללא חיית מחמד</SelectItem>
+                  {pets.map((pet) => (
+                    <SelectItem key={pet.id} value={pet.id}>
+                      {pet.name} ({pet.species})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setPetDialogOpen(true)}
+                disabled={!selectedClientId}
+                title="הוסף חיית מחמד חדשה"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="appointment_type">סוג תור *</Label>
-            <Input
-              id="appointment_type"
-              {...register('appointment_type')}
-              placeholder="בדיקה שגרתית / חיסון / ניתוח וכו'"
-              className="text-right"
+            <TagInput
+              category="appointment_type"
+              value={watch('appointment_type')?.split(',').filter(Boolean) || []}
+              onChange={(values) => setValue('appointment_type', Array.isArray(values) ? values.join(',') : values, { shouldValidate: true })}
+              placeholder="בחר סוג תור"
+              allowCreate={true}
+              multiple={true}
             />
             {errors.appointment_type && (
               <p className="text-sm text-destructive">{errors.appointment_type.message}</p>
@@ -403,6 +449,14 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
         open={clientDialogOpen}
         onClose={() => setClientDialogOpen(false)}
         onSave={handleSaveClient}
+        showAddPetAfterSave={false}
+      />
+
+      <PetDialog
+        open={petDialogOpen}
+        onClose={() => setPetDialogOpen(false)}
+        onSave={handleSavePet}
+        defaultClientId={selectedClientId}
       />
     </>
   );

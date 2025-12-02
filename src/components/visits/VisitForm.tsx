@@ -21,6 +21,7 @@ import { useClinic } from '@/hooks/useClinic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
+import { TagInput } from '@/components/shared/TagInput';
 
 type Visit = Tables<'visits'>;
 type Client = Tables<'clients'>;
@@ -277,20 +278,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   };
 
   const onSubmit = (data: VisitFormData) => {
-    // בנה את visit_type - אם זה חיסון, הוסף את סוג החיסון
+    // בנה את visit_type - אם יש חיסון ברשימה, הוסף את סוג החיסון
     let finalVisitType = data.visit_type;
-    if (data.visit_type === 'vaccination' && data.vaccination_type) {
-      const selectedPet = pets.find(p => p.id === data.pet_id);
-      const species = selectedPet?.species?.toLowerCase() || 'other';
-      const vaccineList = species.includes('כלב') || species.includes('dog')
-        ? VACCINATION_TYPES.dog
-        : species.includes('חתול') || species.includes('cat')
-        ? VACCINATION_TYPES.cat
-        : VACCINATION_TYPES.other;
-      const selectedVaccine = vaccineList.find(v => v.value === data.vaccination_type);
-      if (selectedVaccine) {
-        finalVisitType = `vaccination:${data.vaccination_type}:${selectedVaccine.label}`;
-      }
+    if (data.visit_type?.includes('vaccination') && data.vaccination_type) {
+      // החלף את 'vaccination' עם 'vaccination:סוג_החיסון'
+      finalVisitType = data.visit_type.replace('vaccination', `vaccination:${data.vaccination_type}`);
     }
 
     // Build clean data with only the fields we need
@@ -313,28 +305,17 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     // אם זה ביקור חיסון, צור תזכורת אוטומטית לחיסון הבא
     let followUps = [...(data.follow_ups || [])];
 
-    if (data.visit_type === 'vaccination' && data.vaccination_type) {
-      const selectedPet = pets.find(p => p.id === data.pet_id);
-      const species = selectedPet?.species?.toLowerCase() || 'other';
-      const vaccineList = species.includes('כלב') || species.includes('dog')
-        ? VACCINATION_TYPES.dog
-        : species.includes('חתול') || species.includes('cat')
-        ? VACCINATION_TYPES.cat
-        : VACCINATION_TYPES.other;
+    if (data.visit_type?.includes('vaccination') && data.vaccination_type) {
+      // ברירת מחדל: שנה קדימה (365 ימים)
+      const vaccinationDate = new Date(data.vaccination_date || data.visit_date);
+      const nextDueDate = addDays(vaccinationDate, 365);
 
-      const selectedVaccine = vaccineList.find(v => v.value === data.vaccination_type);
-      if (selectedVaccine) {
-        // חשב את תאריך החיסון הבא מתאריך החיסון שהוזן
-        const vaccinationDate = new Date(data.vaccination_date || data.visit_date);
-        const nextDueDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
-
-        // הוסף תזכורת אוטומטית לחיסון הבא
-        followUps.push({
-          due_date: nextDueDate.toISOString().slice(0, 10),
-          notes: `חיסון ${selectedVaccine.label}`,
-          reminder_type: 'vaccination',
-        });
-      }
+      // הוסף תזכורת אוטומטית לחיסון הבא
+      followUps.push({
+        due_date: nextDueDate.toISOString().slice(0, 10),
+        notes: `חיסון ${data.vaccination_type}`,
+        reminder_type: 'vaccination',
+      });
     }
 
     // Send with follow_ups and price_items as separate properties
@@ -425,27 +406,21 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>סוג ביקור *</Label>
-                  <Select
-                    value={watch('visit_type') || ''}
-                    onValueChange={(value) => {
-                      setValue('visit_type', value, { shouldValidate: true });
-                      // נקה את סוג החיסון אם שינו מחיסון לסוג אחר
-                      if (value !== 'vaccination') {
+                  <TagInput
+                    category="visit_type"
+                    value={watch('visit_type')?.split(',').filter(Boolean) || []}
+                    onChange={(values) => {
+                      const valueStr = Array.isArray(values) ? values.join(',') : values;
+                      setValue('visit_type', valueStr, { shouldValidate: true });
+                      // נקה את סוג החיסון אם אין חיסון ברשימה
+                      const valuesArr = Array.isArray(values) ? values : [values];
+                      if (!valuesArr.includes('vaccination')) {
                         setValue('vaccination_type', '');
                       }
                     }}
-                  >
-                    <SelectTrigger className="text-right">
-                      <SelectValue placeholder="בחר סוג ביקור" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VISIT_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="בחר סוג ביקור"
+                    multiple={true}
+                  />
                   {errors.visit_type && (
                     <p className="text-sm text-destructive">{errors.visit_type.message}</p>
                   )}
@@ -460,8 +435,8 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                 </div>
               </div>
 
-              {/* בחירת סוג חיסון - מופיע רק כשסוג הביקור הוא חיסון */}
-              {watch('visit_type') === 'vaccination' && (
+              {/* בחירת סוג חיסון - מופיע רק כשסוג הביקור כולל חיסון */}
+              {watch('visit_type')?.includes('vaccination') && (
                 <div className="space-y-4 bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -469,30 +444,14 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                         <Syringe className="h-4 w-4" />
                         סוג החיסון *
                       </Label>
-                      <Select
+                      <TagInput
+                        category="vaccination_type"
                         value={watch('vaccination_type') || ''}
-                        onValueChange={(value) => setValue('vaccination_type', value)}
-                      >
-                        <SelectTrigger className="text-right bg-white">
-                          <SelectValue placeholder="בחר סוג חיסון" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(() => {
-                            const selectedPet = pets.find(p => p.id === watch('pet_id'));
-                            const species = selectedPet?.species?.toLowerCase() || 'other';
-                            const vaccineList = species.includes('כלב') || species.includes('dog')
-                              ? VACCINATION_TYPES.dog
-                              : species.includes('חתול') || species.includes('cat')
-                              ? VACCINATION_TYPES.cat
-                              : VACCINATION_TYPES.other;
-                            return vaccineList.map((vaccine) => (
-                              <SelectItem key={vaccine.value} value={vaccine.value}>
-                                {vaccine.label}
-                              </SelectItem>
-                            ));
-                          })()}
-                        </SelectContent>
-                      </Select>
+                        onChange={(value) => setValue('vaccination_type', value as string)}
+                        placeholder="בחר סוג חיסון"
+                        allowCreate={true}
+                        className="bg-white"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -509,53 +468,54 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                     </div>
                   </div>
 
-                  {/* תצוגת תאריך החיסון הבא */}
+                  {/* תצוגת תאריך החיסון הבא - חיסון שנתי כברירת מחדל */}
                   {watch('vaccination_type') && (() => {
-                    const selectedPet = pets.find(p => p.id === watch('pet_id'));
-                    const species = selectedPet?.species?.toLowerCase() || 'other';
-                    const vaccineList = species.includes('כלב') || species.includes('dog')
-                      ? VACCINATION_TYPES.dog
-                      : species.includes('חתול') || species.includes('cat')
-                      ? VACCINATION_TYPES.cat
-                      : VACCINATION_TYPES.other;
-                    const selectedVaccine = vaccineList.find(v => v.value === watch('vaccination_type'));
+                    const vaccinationDateStr = watch('vaccination_date') || new Date().toISOString().slice(0, 10);
+                    const vaccinationDate = new Date(vaccinationDateStr);
+                    // ברירת מחדל: שנה קדימה (365 ימים)
+                    const nextVaccinationDate = addDays(vaccinationDate, 365);
 
-                    if (selectedVaccine) {
-                      const vaccinationDateStr = watch('vaccination_date') || new Date().toISOString().slice(0, 10);
-                      const vaccinationDate = new Date(vaccinationDateStr);
-                      const nextVaccinationDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
-
-                      return (
-                        <div className="bg-green-100 border border-green-300 rounded-lg p-3">
-                          <div className="flex items-center gap-2 text-green-800 flex-wrap">
-                            <Calendar className="h-4 w-4" />
-                            <span className="font-medium">חיסון הבא:</span>
-                            <span className="font-bold">
-                              {format(nextVaccinationDate, 'dd/MM/yyyy', { locale: he })}
-                            </span>
-                            <span className="text-sm text-green-600">
-                              ({selectedVaccine.nextDueDays === 365 ? 'שנה' : selectedVaccine.nextDueDays === 180 ? '6 חודשים' : `${selectedVaccine.nextDueDays} ימים`})
-                            </span>
-                          </div>
-                          <p className="text-xs text-green-600 mt-1">
-                            תזכורת תיווצר אוטומטית בעת שמירת הביקור
-                          </p>
+                    return (
+                      <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+                        <div className="flex items-center gap-2 text-green-800 flex-wrap">
+                          <Calendar className="h-4 w-4" />
+                          <span className="font-medium">חיסון הבא:</span>
+                          <span className="font-bold">
+                            {format(nextVaccinationDate, 'dd/MM/yyyy', { locale: he })}
+                          </span>
+                          <span className="text-sm text-green-600">(שנה)</span>
                         </div>
-                      );
-                    }
-                    return null;
+                        <p className="text-xs text-green-600 mt-1">
+                          תזכורת תיווצר אוטומטית בעת שמירת הביקור
+                        </p>
+                      </div>
+                    );
                   })()}
                 </div>
               )}
 
               <div className="space-y-2">
                 <Label>תלונה עיקרית</Label>
-                <Textarea {...register('chief_complaint')} className="text-right" placeholder="מה הבעיה שהביאה את הבעלים..." />
+                <TagInput
+                  category="chief_complaint"
+                  value={watch('chief_complaint')?.split(',').filter(Boolean) || []}
+                  onChange={(values) => setValue('chief_complaint', Array.isArray(values) ? values.join(', ') : values)}
+                  placeholder="בחר או הקלד תלונה עיקרית"
+                  allowCreate={true}
+                  multiple={true}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>היסטוריה רפואית</Label>
-                <Textarea {...register('history')} className="text-right min-h-[100px]" placeholder="היסטוריה רפואית רלוונטית..." />
+                <TagInput
+                  category="medical_history"
+                  value={watch('history')?.split(',').filter(Boolean) || []}
+                  onChange={(values) => setValue('history', Array.isArray(values) ? values.join(', ') : values)}
+                  placeholder="בחר או הקלד היסטוריה רפואית"
+                  allowCreate={true}
+                  multiple={true}
+                />
               </div>
             </TabsContent>
 
@@ -582,7 +542,13 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                     <Trash2 className="h-4 w-4" />
                   </Button>
                   <div className="flex-1 space-y-2">
-                    <Input {...register(`diagnoses.${index}.diagnosis`)} className="text-right" placeholder="אבחנה" />
+                    <TagInput
+                      category="diagnosis"
+                      value={watch(`diagnoses.${index}.diagnosis`) || ''}
+                      onChange={(value) => setValue(`diagnoses.${index}.diagnosis`, value as string)}
+                      placeholder="בחר או הקלד אבחנה"
+                      allowCreate={true}
+                    />
                     <Input {...register(`diagnoses.${index}.notes`)} className="text-right" placeholder="הערות" />
                   </div>
                 </div>
@@ -605,7 +571,13 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                       <Trash2 className="h-4 w-4" />
                     </Button>
                     <div className="flex-1 space-y-2">
-                      <Input {...register(`treatments.${index}.treatment`)} className="text-right" placeholder="טיפול" />
+                      <TagInput
+                        category="treatment"
+                        value={watch(`treatments.${index}.treatment`) || ''}
+                        onChange={(value) => setValue(`treatments.${index}.treatment`, value as string)}
+                        placeholder="בחר או הקלד טיפול"
+                        allowCreate={true}
+                      />
                       <Input {...register(`treatments.${index}.notes`)} className="text-right" placeholder="הערות" />
                     </div>
                   </div>
@@ -626,7 +598,13 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                       <Trash2 className="h-4 w-4" />
                     </Button>
                     <div className="flex-1 grid grid-cols-3 gap-2">
-                      <Input {...register(`medications.${index}.medication`)} className="text-right" placeholder="תרופה" />
+                      <TagInput
+                        category="medication"
+                        value={watch(`medications.${index}.medication`) || ''}
+                        onChange={(value) => setValue(`medications.${index}.medication`, value as string)}
+                        placeholder="בחר או הקלד תרופה"
+                        allowCreate={true}
+                      />
                       <Input {...register(`medications.${index}.dosage`)} className="text-right" placeholder="מינון" />
                       <Input {...register(`medications.${index}.frequency`)} className="text-right" placeholder="תדירות" />
                     </div>
@@ -730,21 +708,12 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                     
                     <div className="space-y-2">
                       <Label>סוג תזכורת</Label>
-                      <Select
+                      <TagInput
+                        category="reminder_type"
                         value={watch(`follow_ups.${index}.reminder_type`) || 'follow_up'}
-                        onValueChange={(value) => setValue(`follow_ups.${index}.reminder_type`, value)}
-                      >
-                        <SelectTrigger className="text-right">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="follow_up">בדיקת מעקב</SelectItem>
-                          <SelectItem value="vaccination">חיסון</SelectItem>
-                          <SelectItem value="medication">תרופות</SelectItem>
-                          <SelectItem value="test_results">תוצאות בדיקה</SelectItem>
-                          <SelectItem value="general">כללי</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        onChange={(value) => setValue(`follow_ups.${index}.reminder_type`, value as string)}
+                        placeholder="בחר סוג תזכורת"
+                      />
                     </div>
                   </div>
                   

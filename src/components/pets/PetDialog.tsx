@@ -24,9 +24,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
+import { TagInput } from '@/components/shared/TagInput';
+import { TagCategory } from '@/types/tags';
 
 type Pet = Tables<'pets'>;
 type Client = Tables<'clients'>;
+
+// Helper function to get the breed category based on species
+const getBreedCategory = (species: string): TagCategory => {
+  switch (species) {
+    case 'dog':
+      return 'breed_dog';
+    case 'cat':
+      return 'breed_cat';
+    default:
+      return 'breed_other';
+  }
+};
 
 const petSchema = z.object({
   name: z.string().min(1, 'יש להזין שם').max(100),
@@ -226,11 +240,12 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
 
                 <div className="space-y-2">
                   <Label htmlFor="breed">גזע</Label>
-                  <Input
-                    id="breed"
-                    {...register('breed')}
-                    className="text-right"
-                    placeholder="לברדור, פרסי, וכו'"
+                  <TagInput
+                    category={getBreedCategory(watch('species'))}
+                    value={watch('breed') || ''}
+                    onChange={(value) => setValue('breed', value as string)}
+                    placeholder="בחר או הקלד גזע"
+                    allowCreate={true}
                   />
                 </div>
               </div>

@@ -66,7 +66,7 @@ const Clients = () => {
     }
   };
 
-  const handleSave = async (data: ClientFormData) => {
+  const handleSave = async (data: ClientFormData): Promise<string | void> => {
     if (!clinicId) return;
 
     try {
@@ -78,18 +78,23 @@ const Clients = () => {
 
         if (error) throw error;
         toast({ title: 'הלקוח עודכן בהצלחה' });
+        setDialogOpen(false);
+        setEditingClient(null);
+        fetchClients();
       } else {
-        const { error } = await supabase
+        const { data: newClient, error } = await supabase
           .from('clients')
-          .insert({ ...data, clinic_id: clinicId });
+          .insert({ ...data, clinic_id: clinicId })
+          .select()
+          .single();
 
         if (error) throw error;
-        toast({ title: 'הלקוח נוסף בהצלחה' });
+        // Don't show toast here - the dialog will show success view
+        // Don't close dialog - let the user decide to add pet or close
+        setEditingClient(null);
+        fetchClients();
+        return newClient.id; // Return client ID for pet creation
       }
-
-      setDialogOpen(false);
-      setEditingClient(null);
-      fetchClients();
     } catch (error: any) {
       toast({
         title: 'שגיאה',
@@ -126,6 +131,7 @@ const Clients = () => {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setEditingClient(null);
+    fetchClients(); // Refresh in case a pet was added
   };
 
   return (

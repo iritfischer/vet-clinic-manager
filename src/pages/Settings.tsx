@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Settings as SettingsIcon,
   MessageCircle,
@@ -17,6 +18,7 @@ import {
   Shield,
   Smartphone,
   Loader2,
+  Tags,
 } from 'lucide-react';
 import { useWhatsApp } from '@/hooks/useWhatsApp';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { setWebhookUrl, getWebhookSettings } from '@/lib/whatsappService';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
+import { TagManagement } from '@/components/settings/TagManagement';
 
 const Settings = () => {
   const { toast } = useToast();
@@ -242,299 +245,317 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* WhatsApp Settings Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <MessageCircle className="h-6 w-6 text-green-600" />
-                </div>
-                <div>
-                  <CardTitle>הגדרות WhatsApp</CardTitle>
-                  <CardDescription>
-                    חיבור חשבון WhatsApp דרך Green API לשליחת וקבלת הודעות
-                  </CardDescription>
-                </div>
-              </div>
-              {isConfigured && (
-                <Badge variant={isAuthorized ? 'default' : 'destructive'}>
-                  {isAuthorized ? (
-                    <>
-                      <CheckCircle className="h-3 w-3 ml-1" />
-                      מחובר
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="h-3 w-3 ml-1" />
-                      לא מחובר
-                    </>
-                  )}
-                </Badge>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Enable/Disable Toggle */}
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <Label className="text-base">הפעל אינטגרציית WhatsApp</Label>
-                <p className="text-sm text-muted-foreground">
-                  אפשר שליחת וקבלת הודעות WhatsApp ללקוחות
-                </p>
-              </div>
-              <Switch checked={enabled} onCheckedChange={setEnabled} />
-            </div>
+        <Tabs defaultValue="whatsapp" className="space-y-6" dir="rtl">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="whatsapp" className="flex items-center gap-2 flex-row-reverse">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </TabsTrigger>
+            <TabsTrigger value="tags" className="flex items-center gap-2 flex-row-reverse">
+              <Tags className="h-4 w-4" />
+              תגיות
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center gap-2 flex-row-reverse">
+              <Shield className="h-4 w-4" />
+              אבטחה
+            </TabsTrigger>
+          </TabsList>
 
-            <Separator />
-
-            {/* API Credentials */}
-            <div className="space-y-4">
-              <h4 className="font-medium">פרטי התחברות Green API</h4>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="instanceId">Instance ID</Label>
-                  <Input
-                    id="instanceId"
-                    placeholder="1234567890"
-                    value={instanceId}
-                    onChange={(e) => setInstanceId(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    מספר ה-Instance מחשבון Green API שלך
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="apiToken">API Token</Label>
-                  <Input
-                    id="apiToken"
-                    type="password"
-                    placeholder="xxxxxxxxxxxxxxxxxxxx"
-                    value={apiToken}
-                    onChange={(e) => setApiToken(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    ה-Token לגישה ל-API
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Save & Check Buttons */}
-            <div className="flex gap-3">
-              <Button onClick={handleSaveSettings} className="flex-1">
-                שמור הגדרות
-              </Button>
-              <Button
-                variant="outline"
-                onClick={checkStatus}
-                disabled={!instanceId || !apiToken || checking}
-              >
-                {checking ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  'בדוק חיבור'
-                )}
-              </Button>
-            </div>
-
-            {/* Connection Status */}
-            {isConfigured && (
-              <div className="p-4 border rounded-lg space-y-2">
-                <h4 className="font-medium">סטטוס חיבור</h4>
-                <div className="flex items-center gap-2">
-                  {isAuthorized ? (
-                    <>
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                      <span className="text-green-600">מחובר ומוכן לשליחה</span>
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="h-5 w-5 text-red-600" />
-                      <span className="text-red-600">
-                        לא מחובר - יש לסרוק QR בלוח הבקרה של Green API
-                      </span>
-                    </>
-                  )}
-                </div>
-                {settings?.connectedPhone && (
-                  <p className="text-sm text-muted-foreground">
-                    מספר מחובר: {settings.connectedPhone}
-                  </p>
-                )}
-                {settings?.lastChecked && (
-                  <p className="text-xs text-muted-foreground">
-                    בדיקה אחרונה:{' '}
-                    {format(new Date(settings.lastChecked), 'dd/MM/yyyy HH:mm', {
-                      locale: he,
-                    })}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Webhook Setup */}
-            {isConfigured && (
-              <div className="p-4 border rounded-lg space-y-3">
-                <h4 className="font-medium">הגדרת קבלת הודעות נכנסות</h4>
-                <p className="text-sm text-muted-foreground">
-                  כדי לקבל הודעות נכנסות מלקוחות, יש להגדיר webhook ב-Green API
-                </p>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={handleSetupWebhook}
-                    disabled={settingWebhook}
-                  >
-                    {settingWebhook ? (
-                      <RefreshCw className="h-4 w-4 ml-2 animate-spin" />
-                    ) : null}
-                    הגדר Webhook אוטומטית
-                  </Button>
-                  {webhookStatus && (
-                    <Badge variant={webhookStatus === 'מוגדר' ? 'default' : 'secondary'}>
-                      {webhookStatus === 'מוגדר' ? (
-                        <CheckCircle className="h-3 w-3 ml-1" />
+          {/* WhatsApp Tab */}
+          <TabsContent value="whatsapp" className="space-y-6">
+            {/* WhatsApp Settings Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <MessageCircle className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div>
+                      <CardTitle>הגדרות WhatsApp</CardTitle>
+                      <CardDescription>
+                        חיבור חשבון WhatsApp דרך Green API לשליחת וקבלת הודעות
+                      </CardDescription>
+                    </div>
+                  </div>
+                  {isConfigured && (
+                    <Badge variant={isAuthorized ? 'default' : 'destructive'}>
+                      {isAuthorized ? (
+                        <>
+                          <CheckCircle className="h-3 w-3 ml-1" />
+                          מחובר
+                        </>
                       ) : (
-                        <XCircle className="h-3 w-3 ml-1" />
+                        <>
+                          <XCircle className="h-3 w-3 ml-1" />
+                          לא מחובר
+                        </>
                       )}
-                      {webhookStatus}
                     </Badge>
                   )}
                 </div>
-                <div className="flex gap-2 mt-3">
-                  <Button variant="outline" size="sm" onClick={checkWebhookSettings}>
-                    <RefreshCw className="h-3 w-3 ml-1" />
-                    רענן הגדרות
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Enable/Disable Toggle */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <Label className="text-base">הפעל אינטגרציית WhatsApp</Label>
+                    <p className="text-sm text-muted-foreground">
+                      אפשר שליחת וקבלת הודעות WhatsApp ללקוחות
+                    </p>
+                  </div>
+                  <Switch checked={enabled} onCheckedChange={setEnabled} />
+                </div>
+
+                <Separator />
+
+                {/* API Credentials */}
+                <div className="space-y-4">
+                  <h4 className="font-medium">פרטי התחברות Green API</h4>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="instanceId">Instance ID</Label>
+                      <Input
+                        id="instanceId"
+                        placeholder="1234567890"
+                        value={instanceId}
+                        onChange={(e) => setInstanceId(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        מספר ה-Instance מחשבון Green API שלך
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="apiToken">API Token</Label>
+                      <Input
+                        id="apiToken"
+                        type="password"
+                        placeholder="xxxxxxxxxxxxxxxxxxxx"
+                        value={apiToken}
+                        onChange={(e) => setApiToken(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        ה-Token לגישה ל-API
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save & Check Buttons */}
+                <div className="flex gap-3">
+                  <Button onClick={handleSaveSettings} className="flex-1">
+                    שמור הגדרות
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={checkStatus}
+                    disabled={!instanceId || !apiToken || checking}
+                  >
+                    {checking ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'בדוק חיבור'
+                    )}
                   </Button>
                 </div>
-                <div className="mt-3 p-3 bg-muted/50 rounded text-xs space-y-1">
-                  <p><strong>Webhook URL:</strong> {currentWebhookUrl || 'לא מוגדר'}</p>
-                  <p><strong>Incoming Webhook:</strong> {incomingWebhookEnabled || 'לא מוגדר'}</p>
-                  {allSettings && (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-muted-foreground">כל ההגדרות מ-Green API</summary>
-                      <pre className="mt-2 p-2 bg-black/10 rounded overflow-auto text-[10px]">
-                        {JSON.stringify(allSettings, null, 2)}
-                      </pre>
-                    </details>
-                  )}
-                  <p className="pt-2 text-muted-foreground">
-                    URL נדרש: <code>https://dgazghyyaeknkyxlvhdu.supabase.co/functions/v1/whatsapp-webhook</code>
-                  </p>
-                </div>
-                <div className="mt-3 p-3 border border-yellow-200 bg-yellow-50 rounded text-sm">
-                  <p className="font-medium text-yellow-800 mb-2">אם הודעות לא מתקבלות:</p>
-                  <ol className="list-decimal list-inside space-y-1 text-yellow-700">
-                    <li>היכנס ל-<a href="https://console.green-api.com" target="_blank" className="underline">console.green-api.com</a></li>
-                    <li>בחר את ה-Instance שלך</li>
-                    <li>לך ל-Settings → Webhooks</li>
-                    <li>וודא ש-<strong>webhookUrl</strong> מוגדר נכון</li>
-                    <li>וודא ש-<strong>incomingWebhook</strong> מסומן כ-Yes</li>
+
+                {/* Connection Status */}
+                {isConfigured && (
+                  <div className="p-4 border rounded-lg space-y-2">
+                    <h4 className="font-medium">סטטוס חיבור</h4>
+                    <div className="flex items-center gap-2">
+                      {isAuthorized ? (
+                        <>
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <span className="text-green-600">מחובר ומוכן לשליחה</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-5 w-5 text-red-600" />
+                          <span className="text-red-600">
+                            לא מחובר - יש לסרוק QR בלוח הבקרה של Green API
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    {settings?.connectedPhone && (
+                      <p className="text-sm text-muted-foreground">
+                        מספר מחובר: {settings.connectedPhone}
+                      </p>
+                    )}
+                    {settings?.lastChecked && (
+                      <p className="text-xs text-muted-foreground">
+                        בדיקה אחרונה:{' '}
+                        {format(new Date(settings.lastChecked), 'dd/MM/yyyy HH:mm', {
+                          locale: he,
+                        })}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Webhook Setup */}
+                {isConfigured && (
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <h4 className="font-medium">הגדרת קבלת הודעות נכנסות</h4>
+                    <p className="text-sm text-muted-foreground">
+                      כדי לקבל הודעות נכנסות מלקוחות, יש להגדיר webhook ב-Green API
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={handleSetupWebhook}
+                        disabled={settingWebhook}
+                      >
+                        {settingWebhook ? (
+                          <RefreshCw className="h-4 w-4 ml-2 animate-spin" />
+                        ) : null}
+                        הגדר Webhook אוטומטית
+                      </Button>
+                      {webhookStatus && (
+                        <Badge variant={webhookStatus === 'מוגדר' ? 'default' : 'secondary'}>
+                          {webhookStatus === 'מוגדר' ? (
+                            <CheckCircle className="h-3 w-3 ml-1" />
+                          ) : (
+                            <XCircle className="h-3 w-3 ml-1" />
+                          )}
+                          {webhookStatus}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <Button variant="outline" size="sm" onClick={checkWebhookSettings}>
+                        <RefreshCw className="h-3 w-3 ml-1" />
+                        רענן הגדרות
+                      </Button>
+                    </div>
+                    <div className="mt-3 p-3 bg-muted/50 rounded text-xs space-y-1">
+                      <p><strong>Webhook URL:</strong> {currentWebhookUrl || 'לא מוגדר'}</p>
+                      <p><strong>Incoming Webhook:</strong> {incomingWebhookEnabled || 'לא מוגדר'}</p>
+                      {allSettings && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-muted-foreground">כל ההגדרות מ-Green API</summary>
+                          <pre className="mt-2 p-2 bg-black/10 rounded overflow-auto text-[10px]">
+                            {JSON.stringify(allSettings, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                      <p className="pt-2 text-muted-foreground">
+                        URL נדרש: <code>https://dgazghyyaeknkyxlvhdu.supabase.co/functions/v1/whatsapp-webhook</code>
+                      </p>
+                    </div>
+                    <div className="mt-3 p-3 border border-yellow-200 bg-yellow-50 rounded text-sm">
+                      <p className="font-medium text-yellow-800 mb-2">אם הודעות לא מתקבלות:</p>
+                      <ol className="list-decimal list-inside space-y-1 text-yellow-700">
+                        <li>היכנס ל-<a href="https://console.green-api.com" target="_blank" className="underline">console.green-api.com</a></li>
+                        <li>בחר את ה-Instance שלך</li>
+                        <li>לך ל-Settings → Webhooks</li>
+                        <li>וודא ש-<strong>webhookUrl</strong> מוגדר נכון</li>
+                        <li>וודא ש-<strong>incomingWebhook</strong> מסומן כ-Yes</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Instructions */}
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <h4 className="font-medium">הוראות הגדרה:</h4>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    <li>
+                      היכנס ל-
+                      <a
+                        href="https://green-api.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        green-api.com
+                      </a>
+                      {' '}וצור חשבון
+                    </li>
+                    <li>צור Instance חדש ורשום את ה-Instance ID וה-API Token</li>
+                    <li>בלוח הבקרה של Green API, סרוק את ה-QR עם WhatsApp</li>
+                    <li>הזן את הפרטים כאן ושמור</li>
+                    <li>לחץ "בדוק חיבור" לוודא שהכל עובד</li>
+                    <li>לחץ "הגדר Webhook אוטומטית" לקבלת הודעות נכנסות</li>
                   </ol>
                 </div>
-              </div>
-            )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <Separator />
+          {/* Tags Tab */}
+          <TabsContent value="tags">
+            <TagManagement />
+          </TabsContent>
 
-            {/* Instructions */}
-            <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-              <h4 className="font-medium">הוראות הגדרה:</h4>
-              <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                <li>
-                  היכנס ל-
-                  <a
-                    href="https://green-api.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    green-api.com
-                  </a>
-                  {' '}וצור חשבון
-                </li>
-                <li>צור Instance חדש ורשום את ה-Instance ID וה-API Token</li>
-                <li>בלוח הבקרה של Green API, סרוק את ה-QR עם WhatsApp</li>
-                <li>הזן את הפרטים כאן ושמור</li>
-                <li>לחץ "בדוק חיבור" לוודא שהכל עובד</li>
-                <li>לחץ "הגדר Webhook אוטומטית" לקבלת הודעות נכנסות</li>
-              </ol>
-            </div>
-          </CardContent>
-        </Card>
+          {/* Security Tab */}
+          <TabsContent value="security" className="space-y-6">
+            {/* Security Settings Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Shield className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <CardTitle>אבטחת חשבון</CardTitle>
+                    <CardDescription>
+                      הגדרות אבטחה נוספות להגנה על החשבון שלך
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* MFA Toggle */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Smartphone className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <Label className="text-base">אימות דו-שלבי (2FA)</Label>
+                      <p className="text-sm text-muted-foreground">
+                        הוסף שכבת אבטחה נוספת עם אפליקציית אימות
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {mfaEnabled && (
+                      <Badge variant="default">
+                        <CheckCircle className="h-3 w-3 ml-1" />
+                        פעיל
+                      </Badge>
+                    )}
+                    <Button
+                      variant={mfaEnabled ? 'destructive' : 'default'}
+                      size="sm"
+                      onClick={mfaEnabled ? handleDisableMFA : handleEnableMFA}
+                      disabled={mfaLoading}
+                    >
+                      {mfaLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : mfaEnabled ? (
+                        'בטל'
+                      ) : (
+                        'הפעל'
+                      )}
+                    </Button>
+                  </div>
+                </div>
 
-        {/* Security Settings Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Shield className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <CardTitle>אבטחת חשבון</CardTitle>
-                <CardDescription>
-                  הגדרות אבטחה נוספות להגנה על החשבון שלך
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* MFA Toggle */}
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <Smartphone className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <Label className="text-base">אימות דו-שלבי (2FA)</Label>
+                {/* Session info */}
+                <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                  <h4 className="font-medium">מידע על הפעלה</h4>
                   <p className="text-sm text-muted-foreground">
-                    הוסף שכבת אבטחה נוספת עם אפליקציית אימות
+                    ההתחברות שלך תפוג אוטומטית לאחר 8 שעות של חוסר פעילות
                   </p>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {mfaEnabled && (
-                  <Badge variant="default">
-                    <CheckCircle className="h-3 w-3 ml-1" />
-                    פעיל
-                  </Badge>
-                )}
-                <Button
-                  variant={mfaEnabled ? 'destructive' : 'default'}
-                  size="sm"
-                  onClick={mfaEnabled ? handleDisableMFA : handleEnableMFA}
-                  disabled={mfaLoading}
-                >
-                  {mfaLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : mfaEnabled ? (
-                    'בטל'
-                  ) : (
-                    'הפעל'
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Session info */}
-            <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-              <h4 className="font-medium">מידע על הפעלה</h4>
-              <p className="text-sm text-muted-foreground">
-                ההתחברות שלך תפוג אוטומטית לאחר 8 שעות של חוסר פעילות
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Placeholder for future settings */}
-        <Card className="opacity-50">
-          <CardHeader>
-            <CardTitle className="text-muted-foreground">הגדרות נוספות</CardTitle>
-            <CardDescription>
-              בקרוב - הגדרות קליניקה, התראות, ועוד...
-            </CardDescription>
-          </CardHeader>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* MFA Setup Dialog */}
