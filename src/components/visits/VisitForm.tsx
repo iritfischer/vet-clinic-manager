@@ -14,8 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Trash2, X, Calendar, Syringe, PlusCircle } from 'lucide-react';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Plus, Trash2, X, Calendar, Syringe, PlusCircle, ChevronLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -75,8 +75,11 @@ const visitSchema = z.object({
   vaccination_date: z.string().optional(),
   visit_date: z.string().min(1, 'יש להזין תאריך'),
   chief_complaint: z.string().max(1000).optional().or(z.literal('')),
-  history: z.string().max(2000).optional().or(z.literal('')),
+  general_history: z.string().max(2000).optional().or(z.literal('')),
+  medical_history: z.string().max(2000).optional().or(z.literal('')),
+  current_history: z.string().max(2000).optional().or(z.literal('')),
   physical_exam: z.string().max(2000).optional().or(z.literal('')),
+  additional_tests: z.string().max(2000).optional().or(z.literal('')),
   diagnoses: z.array(z.object({
     diagnosis: z.string(),
     notes: z.string().optional(),
@@ -114,6 +117,16 @@ interface VisitFormProps {
   preSelectedPetId?: string;
 }
 
+// Steps for the visit form stepper
+const VISIT_STEPS = [
+  { value: 'basic', label: 'פרטים' },
+  { value: 'exam', label: 'בדיקה' },
+  { value: 'diagnosis', label: 'אבחנה' },
+  { value: 'treatment', label: 'טיפול' },
+  { value: 'followup', label: 'פולואו אפ' },
+  { value: 'billing', label: 'חיוב' },
+];
+
 export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSelectedPetId }: VisitFormProps) => {
   const { clinicId } = useClinic();
   const { toast } = useToast();
@@ -121,6 +134,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   const [pets, setPets] = useState<Pet[]>([]);
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(preSelectedClientId || '');
+  const [activeTab, setActiveTab] = useState('basic');
 
   // State for new price item dialog
   const [showNewPriceItemDialog, setShowNewPriceItemDialog] = useState(false);
@@ -142,8 +156,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       vaccination_date: new Date().toISOString().slice(0, 10),
       visit_date: new Date().toISOString().slice(0, 16),
       chief_complaint: '',
-      history: '',
+      general_history: '',
+      medical_history: '',
+      current_history: '',
       physical_exam: '',
+      additional_tests: '',
       diagnoses: [],
       treatments: [],
       medications: [],
@@ -222,8 +239,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       setValue('vaccination_type', vaccinationType);
       setValue('visit_date', visit.visit_date.slice(0, 16));
       setValue('chief_complaint', visit.chief_complaint || '');
-      setValue('history', visit.history || '');
+      setValue('general_history', (visit as any).general_history || '');
+      setValue('medical_history', (visit as any).medical_history || '');
+      setValue('current_history', (visit as any).current_history || '');
       setValue('physical_exam', visit.physical_exam || '');
+      setValue('additional_tests', (visit as any).additional_tests || '');
       setValue('recommendations', visit.recommendations || '');
       setValue('client_summary', visit.client_summary || '');
       setValue('status', visit.status as 'open' | 'completed' | 'cancelled');
@@ -369,8 +389,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       visit_type: finalVisitType,
       visit_date: data.visit_date,
       chief_complaint: data.chief_complaint || null,
-      history: data.history || null,
+      general_history: data.general_history || null,
+      medical_history: data.medical_history || null,
+      current_history: data.current_history || null,
       physical_exam: data.physical_exam || null,
+      additional_tests: data.additional_tests || null,
       recommendations: data.recommendations || null,
       client_summary: data.client_summary || null,
       diagnoses: data.diagnoses?.length ? data.diagnoses : null,
@@ -417,69 +440,38 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)}>
-          <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-6" dir="rtl">
-              <TabsTrigger value="basic">פרטים</TabsTrigger>
-              <TabsTrigger value="exam">בדיקה</TabsTrigger>
-              <TabsTrigger value="diagnosis">אבחנה</TabsTrigger>
-              <TabsTrigger value="treatment">טיפול</TabsTrigger>
-              <TabsTrigger value="followup">פולואו אפ</TabsTrigger>
-              <TabsTrigger value="billing">חיוב</TabsTrigger>
-            </TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            {/* Stepper Navigation - Blue/Indigo theme to distinguish from orange pet tabs */}
+            <div className="flex items-center justify-between bg-gradient-to-l from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-2 mb-4" dir="rtl">
+              {VISIT_STEPS.map((step, index) => (
+                <div key={step.value} className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(step.value)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                      activeTab === step.value
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-blue-700 hover:bg-blue-100'
+                    }`}
+                  >
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold ${
+                      activeTab === step.value
+                        ? 'bg-white/30'
+                        : 'bg-blue-200'
+                    }`}>
+                      {index + 1}
+                    </span>
+                    <span className="font-medium">{step.label}</span>
+                  </button>
+                  {index < VISIT_STEPS.length - 1 && (
+                    <ChevronLeft className="h-5 w-5 text-blue-300 mx-1" />
+                  )}
+                </div>
+              ))}
+            </div>
 
             {/* Basic Info */}
             <TabsContent value="basic" className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>לקוח *</Label>
-                  <Select
-                    value={watch('client_id') || ''}
-                    onValueChange={(value) => {
-                      setValue('client_id', value, { shouldValidate: true });
-                      setSelectedClientId(value);
-                      setValue('pet_id', '');
-                    }}
-                  >
-                    <SelectTrigger className="text-right">
-                      <SelectValue placeholder="בחר לקוח" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.first_name} {client.last_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.client_id && (
-                    <p className="text-sm text-destructive">{errors.client_id.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>חיית מחמד *</Label>
-                  <Select
-                    value={watch('pet_id') || ''}
-                    onValueChange={(value) => setValue('pet_id', value, { shouldValidate: true })}
-                    disabled={!selectedClientId}
-                  >
-                    <SelectTrigger className="text-right">
-                      <SelectValue placeholder="בחר חיית מחמד" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pets.map((pet) => (
-                        <SelectItem key={pet.id} value={pet.id}>
-                          {pet.name} ({pet.species})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.pet_id && (
-                    <p className="text-sm text-destructive">{errors.pet_id.message}</p>
-                  )}
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>סוג ביקור *</Label>
@@ -571,6 +563,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                 </div>
               )}
 
+            </TabsContent>
+
+            {/* Exam Tab - All examination data */}
+            <TabsContent value="exam" className="space-y-4 mt-4">
+              {/* תלונה עיקרית - תגיות */}
               <div className="space-y-2">
                 <Label>תלונה עיקרית</Label>
                 <TagInput
@@ -583,24 +580,54 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                 />
               </div>
 
+              {/* היסטוריה כללית - טקסט חופשי */}
               <div className="space-y-2">
-                <Label>היסטוריה רפואית</Label>
-                <TagInput
-                  category="medical_history"
-                  value={watch('history')?.split(',').filter(Boolean) || []}
-                  onChange={(values) => setValue('history', Array.isArray(values) ? values.join(', ') : values)}
-                  placeholder="בחר או הקלד היסטוריה רפואית"
-                  allowCreate={true}
-                  multiple={true}
+                <Label>היסטוריה כללית</Label>
+                <Textarea
+                  {...register('general_history')}
+                  className="text-right min-h-[80px]"
+                  placeholder="היסטוריה כללית של החיה..."
                 />
               </div>
-            </TabsContent>
 
-            {/* Physical Exam */}
-            <TabsContent value="exam" className="space-y-4 mt-4">
+              {/* היסטוריה רפואית - טקסט חופשי */}
               <div className="space-y-2">
-                <Label>בדיקה גופנית</Label>
-                <Textarea {...register('physical_exam')} className="text-right min-h-[200px]" placeholder="ממצאים מבדיקה גופנית..." />
+                <Label>היסטוריה רפואית</Label>
+                <Textarea
+                  {...register('medical_history')}
+                  className="text-right min-h-[80px]"
+                  placeholder="מחלות קודמות, ניתוחים, אלרגיות..."
+                />
+              </div>
+
+              {/* היסטוריה נוכחית - טקסט חופשי */}
+              <div className="space-y-2">
+                <Label>היסטוריה נוכחית</Label>
+                <Textarea
+                  {...register('current_history')}
+                  className="text-right min-h-[80px]"
+                  placeholder="מה קרה? מתי התחיל? האם השתנה משהו באחרונה?..."
+                />
+              </div>
+
+              {/* בדיקה פיזיקלית - טקסט חופשי */}
+              <div className="space-y-2">
+                <Label>בדיקה פיזיקלית</Label>
+                <Textarea
+                  {...register('physical_exam')}
+                  className="text-right min-h-[100px]"
+                  placeholder="ממצאים מבדיקה גופנית: טמפרטורה, דופק, נשימה, ריריות, בלוטות לימפה..."
+                />
+              </div>
+
+              {/* בדיקות נוספות - טקסט חופשי */}
+              <div className="space-y-2">
+                <Label>בדיקות נוספות</Label>
+                <Textarea
+                  {...register('additional_tests')}
+                  className="text-right min-h-[80px]"
+                  placeholder="צילומים, בדיקות דם, שתן, אולטרסאונד..."
+                />
               </div>
             </TabsContent>
 

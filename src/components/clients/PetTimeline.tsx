@@ -19,8 +19,20 @@ import {
   ChevronDown,
   ChevronUp,
   Send,
-  Edit
+  Edit,
+  Trash2
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
 import { VisitWithRelations } from '@/lib/visitSummaryTypes';
 
@@ -78,11 +90,14 @@ const formatVisitType = (visitType: string): string => {
 
 export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportPDF }: PetTimelineProps) => {
   const { clinicId } = useClinic();
+  const { toast } = useToast();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
   const [selectedVisitForSummary, setSelectedVisitForSummary] = useState<VisitWithRelations | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [visitToDelete, setVisitToDelete] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => {
     if (clinicId && petId) {
@@ -181,6 +196,36 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
 
   const toggleExpand = (eventId: string) => {
     setExpandedEvent(expandedEvent === eventId ? null : eventId);
+  };
+
+  const handleDeleteVisit = async () => {
+    if (!visitToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('visits')
+        .delete()
+        .eq('id', visitToDelete.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'הצלחה',
+        description: 'הביקור נמחק בהצלחה',
+      });
+
+      // Refresh timeline
+      fetchTimelineData();
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setVisitToDelete(null);
+    }
   };
 
   const handleSendSummary = async (visitId: string) => {
@@ -283,6 +328,19 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
                               <Edit className="h-4 w-4" />
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVisitToDelete({ id: event.id, title: event.title });
+                              setDeleteDialogOpen(true);
+                            }}
+                            title="מחק ביקור"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -412,6 +470,29 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
         onOpenChange={setSummaryDialogOpen}
         visit={selectedVisitForSummary}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>מחיקת ביקור</AlertDialogTitle>
+            <AlertDialogDescription>
+              האם את/ה בטוח/ה שברצונך למחוק את הביקור "{visitToDelete?.title}"?
+              <br />
+              פעולה זו לא ניתנת לביטול.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogCancel>ביטול</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteVisit}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              מחק
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

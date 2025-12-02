@@ -799,8 +799,8 @@ const ClientProfile = () => {
               {selectedPet && (
                 <>
                   <Separator />
-                  <div className="space-y-3 pt-2">
-                    <div className="flex items-center gap-2 flex-row-reverse">
+                  <div className="space-y-3 pt-2" dir="rtl">
+                    <div className="flex items-center gap-2">
                       <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-lg font-bold text-white">
                         {selectedPet.name.charAt(0)}
                       </div>
@@ -817,18 +817,19 @@ const ClientProfile = () => {
                       </div>
                     </div>
 
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2 text-right">
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
                       {/* מין */}
                       <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">מין</span>
                         <Badge variant="outline" className="bg-white text-xs">
                           {selectedPet.sex === 'male' ? 'זכר' :
                            selectedPet.sex === 'female' ? 'נקבה' : 'לא ידוע'}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">מין</span>
                       </div>
 
                       {/* גיל */}
                       <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">גיל</span>
                         <Badge variant="outline" className="bg-white text-xs">
                           {selectedPet.birth_date ? (() => {
                             const birthDate = new Date(selectedPet.birth_date);
@@ -839,11 +840,11 @@ const ClientProfile = () => {
                             return `${months} חודשים`;
                           })() : 'לא ידוע'}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">גיל</span>
                       </div>
 
                       {/* סטטוס עיקור */}
                       <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">עיקור</span>
                         <Badge
                           variant="outline"
                           className={`text-xs ${selectedPet.neuter_status === 'neutered' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white'}`}
@@ -851,25 +852,24 @@ const ClientProfile = () => {
                           {selectedPet.neuter_status === 'neutered' ? 'מעוקר/מסורס' :
                            selectedPet.neuter_status === 'intact' ? 'לא מעוקר' : 'לא ידוע'}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">עיקור</span>
                       </div>
 
                       {/* משקל */}
                       {selectedPet.current_weight && (
                         <div className="flex justify-between items-center">
+                          <span className="text-xs text-muted-foreground">משקל</span>
                           <Badge variant="outline" className="bg-white text-xs">
                             {selectedPet.current_weight} ק״ג
                           </Badge>
-                          <span className="text-xs text-muted-foreground">משקל</span>
                         </div>
                       )}
 
                       {/* סטטוס */}
                       <div className="flex justify-between items-center pt-1 border-t border-orange-200">
+                        <span className="text-xs text-muted-foreground">סטטוס חיה</span>
                         <Badge className={`text-xs ${selectedPet.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`}>
                           {selectedPet.status === 'active' ? 'פעיל' : 'לא פעיל'}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">סטטוס חיה</span>
                       </div>
                     </div>
                   </div>
@@ -997,8 +997,8 @@ const ClientProfile = () => {
                       <TabsContent value="details" className="mt-6">
                         <Card>
                           <CardHeader>
-                            <div className="flex items-center justify-between flex-row-reverse">
-                              <CardTitle className="text-xl text-right">פרטי {pet.name}</CardTitle>
+                            <div className="flex items-center justify-between" dir="rtl">
+                              <CardTitle className="text-xl">פרטי {pet.name}</CardTitle>
                               <Button
                                 variant="default"
                                 size="sm"

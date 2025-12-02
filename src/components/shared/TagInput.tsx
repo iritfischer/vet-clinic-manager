@@ -219,7 +219,6 @@ export const TagInput = ({
             placeholder="חפש או הקלד..."
             value={searchQuery}
             onValueChange={setSearchQuery}
-            className="text-right"
           />
           <CommandList>
             <CommandEmpty>

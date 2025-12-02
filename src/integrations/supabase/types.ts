@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -11,6 +12,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -695,15 +721,19 @@ export type Database = {
       }
       visits: {
         Row: {
+          additional_tests: string | null
           chief_complaint: string | null
           client_id: string
           client_summary: string | null
           clinic_id: string
           created_at: string
+          current_history: string | null
           diagnoses: Json | null
+          general_history: string | null
           history: string | null
           id: string
           is_visible_to_client: boolean | null
+          medical_history: string | null
           medications: Json | null
           pet_id: string
           physical_exam: string | null
@@ -716,15 +746,19 @@ export type Database = {
           visit_type: string
         }
         Insert: {
+          additional_tests?: string | null
           chief_complaint?: string | null
           client_id: string
           client_summary?: string | null
           clinic_id: string
           created_at?: string
+          current_history?: string | null
           diagnoses?: Json | null
+          general_history?: string | null
           history?: string | null
           id?: string
           is_visible_to_client?: boolean | null
+          medical_history?: string | null
           medications?: Json | null
           pet_id: string
           physical_exam?: string | null
@@ -737,15 +771,19 @@ export type Database = {
           visit_type: string
         }
         Update: {
+          additional_tests?: string | null
           chief_complaint?: string | null
           client_id?: string
           client_summary?: string | null
           clinic_id?: string
           created_at?: string
+          current_history?: string | null
           diagnoses?: Json | null
+          general_history?: string | null
           history?: string | null
           id?: string
           is_visible_to_client?: boolean | null
+          medical_history?: string | null
           medications?: Json | null
           pet_id?: string
           physical_exam?: string | null
@@ -1011,6 +1049,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "vet", "reception"],
