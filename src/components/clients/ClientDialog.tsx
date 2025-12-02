@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AITextarea } from '@/components/ui/ai-textarea';
 import { Switch } from '@/components/ui/switch';
 import { PetDialog } from '@/components/pets/PetDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -259,9 +260,11 @@ export const ClientDialog = ({ open, onClose, onSave, client, showAddPetAfterSav
 
           <div className="space-y-2">
             <Label htmlFor="notes">הערות</Label>
-            <Textarea
+            <AITextarea
               id="notes"
-              {...register('notes')}
+              value={watch('notes') || ''}
+              onValueChange={(value) => setValue('notes', value)}
+              aiContext="general"
               className="text-right min-h-[100px]"
             />
           </div>

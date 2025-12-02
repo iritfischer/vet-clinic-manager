@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AITextarea } from '@/components/ui/ai-textarea';
 import {
   Select,
   SelectContent,
@@ -462,9 +463,11 @@ export const AppointmentDialog = ({ open, onClose, onSave, appointment }: Appoin
 
           <div className="space-y-2">
             <Label htmlFor="notes">הערות</Label>
-            <Textarea
+            <AITextarea
               id="notes"
-              {...register('notes')}
+              value={watch('notes') || ''}
+              onValueChange={(value) => setValue('notes', value)}
+              aiContext="general"
               className="text-right min-h-[100px]"
               placeholder="הערות נוספות על התור..."
             />

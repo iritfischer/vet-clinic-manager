@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AITextarea } from '@/components/ui/ai-textarea';
 import {
   Select,
   SelectContent,
@@ -236,9 +237,11 @@ export const LeadDialog = ({ open, onClose, onSave, lead, initialPhone }: LeadDi
 
           <div className="space-y-2">
             <Label htmlFor="notes">הערות</Label>
-            <Textarea
+            <AITextarea
               id="notes"
-              {...register('notes')}
+              value={watch('notes') || ''}
+              onValueChange={(value) => setValue('notes', value)}
+              aiContext="general"
               className="text-right min-h-[80px]"
             />
           </div>
@@ -299,9 +302,11 @@ export const LeadDialog = ({ open, onClose, onSave, lead, initialPhone }: LeadDi
 
               <div className="space-y-2">
                 <Label htmlFor="pet_notes">הערות על החיה</Label>
-                <Textarea
+                <AITextarea
                   id="pet_notes"
-                  {...register('pet_notes')}
+                  value={watch('pet_notes') || ''}
+                  onValueChange={(value) => setValue('pet_notes', value)}
+                  aiContext="general"
                   className="text-right min-h-[60px]"
                 />
               </div>

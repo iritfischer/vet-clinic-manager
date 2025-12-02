@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AITextarea } from '@/components/ui/ai-textarea';
 import {
   Select,
   SelectContent,
@@ -281,9 +282,11 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
 
               <div className="space-y-2">
                 <Label htmlFor="color_markings">צבע וסימנים מזהים</Label>
-                <Textarea
+                <AITextarea
                   id="color_markings"
-                  {...register('color_markings')}
+                  value={watch('color_markings') || ''}
+                  onValueChange={(value) => setValue('color_markings', value)}
+                  aiContext="general"
                   className="text-right"
                   placeholder="תיאור צבע הפרווה, כתמים, סימנים מיוחדים..."
                 />

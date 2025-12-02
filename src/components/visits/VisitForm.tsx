@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AITextarea } from '@/components/ui/ai-textarea';
 import {
   Select,
   SelectContent,
@@ -583,8 +584,10 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
               {/* היסטוריה כללית - טקסט חופשי */}
               <div className="space-y-2">
                 <Label>היסטוריה כללית</Label>
-                <Textarea
-                  {...register('general_history')}
+                <AITextarea
+                  value={watch('general_history') || ''}
+                  onValueChange={(value) => setValue('general_history', value)}
+                  aiContext="visit_notes"
                   className="text-right min-h-[80px]"
                   placeholder="היסטוריה כללית של החיה..."
                 />
@@ -593,8 +596,10 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
               {/* היסטוריה רפואית - טקסט חופשי */}
               <div className="space-y-2">
                 <Label>היסטוריה רפואית</Label>
-                <Textarea
-                  {...register('medical_history')}
+                <AITextarea
+                  value={watch('medical_history') || ''}
+                  onValueChange={(value) => setValue('medical_history', value)}
+                  aiContext="visit_notes"
                   className="text-right min-h-[80px]"
                   placeholder="מחלות קודמות, ניתוחים, אלרגיות..."
                 />
@@ -603,8 +608,10 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
               {/* היסטוריה נוכחית - טקסט חופשי */}
               <div className="space-y-2">
                 <Label>היסטוריה נוכחית</Label>
-                <Textarea
-                  {...register('current_history')}
+                <AITextarea
+                  value={watch('current_history') || ''}
+                  onValueChange={(value) => setValue('current_history', value)}
+                  aiContext="visit_notes"
                   className="text-right min-h-[80px]"
                   placeholder="מה קרה? מתי התחיל? האם השתנה משהו באחרונה?..."
                 />
@@ -613,8 +620,10 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
               {/* בדיקה פיזיקלית - טקסט חופשי */}
               <div className="space-y-2">
                 <Label>בדיקה פיזיקלית</Label>
-                <Textarea
-                  {...register('physical_exam')}
+                <AITextarea
+                  value={watch('physical_exam') || ''}
+                  onValueChange={(value) => setValue('physical_exam', value)}
+                  aiContext="visit_notes"
                   className="text-right min-h-[100px]"
                   placeholder="ממצאים מבדיקה גופנית: טמפרטורה, דופק, נשימה, ריריות, בלוטות לימפה..."
                 />
@@ -623,8 +632,10 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
               {/* בדיקות נוספות - טקסט חופשי */}
               <div className="space-y-2">
                 <Label>בדיקות נוספות</Label>
-                <Textarea
-                  {...register('additional_tests')}
+                <AITextarea
+                  value={watch('additional_tests') || ''}
+                  onValueChange={(value) => setValue('additional_tests', value)}
+                  aiContext="visit_notes"
                   className="text-right min-h-[80px]"
                   placeholder="צילומים, בדיקות דם, שתן, אולטרסאונד..."
                 />
@@ -718,12 +729,24 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
 
               <div className="space-y-2">
                 <Label>המלצות</Label>
-                <Textarea {...register('recommendations')} className="text-right min-h-[100px]" placeholder="המלצות לבעלים..." />
+                <AITextarea
+                  value={watch('recommendations') || ''}
+                  onValueChange={(value) => setValue('recommendations', value)}
+                  aiContext="recommendations"
+                  className="text-right min-h-[100px]"
+                  placeholder="המלצות לבעלים..."
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>סיכום ללקוח</Label>
-                <Textarea {...register('client_summary')} className="text-right min-h-[100px]" placeholder="סיכום בשפה פשוטה ללקוח..." />
+                <AITextarea
+                  value={watch('client_summary') || ''}
+                  onValueChange={(value) => setValue('client_summary', value)}
+                  aiContext="client_summary"
+                  className="text-right min-h-[100px]"
+                  placeholder="סיכום בשפה פשוטה ללקוח..."
+                />
               </div>
             </TabsContent>
 
@@ -863,9 +886,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   
                   <div className="space-y-2">
                     <Label>הערות</Label>
-                    <Textarea 
-                      {...register(`follow_ups.${index}.notes`)} 
-                      className="text-right" 
+                    <AITextarea
+                      value={watch(`follow_ups.${index}.notes`) || ''}
+                      onValueChange={(value) => setValue(`follow_ups.${index}.notes`, value)}
+                      aiContext="general"
+                      className="text-right"
                       placeholder="למה צריך לעשות פולואו אפ..."
                       rows={3}
                     />
