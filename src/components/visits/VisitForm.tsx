@@ -19,6 +19,7 @@ import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Plus, Trash2, X, Calendar, Syringe, PlusCircle, ChevronLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
+import { useVisitAutoSave } from '@/hooks/useVisitAutoSave';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -30,6 +31,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 type Visit = Tables<'visits'>;
 type Client = Tables<'clients'>;
@@ -116,6 +127,9 @@ interface VisitFormProps {
   visit?: Visit | null;
   preSelectedClientId?: string;
   preSelectedPetId?: string;
+  visitId?: string;
+  onFormDirtyChange?: (isDirty: boolean) => void;
+  submitRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 // Steps for the visit form stepper
@@ -128,7 +142,7 @@ const VISIT_STEPS = [
   { value: 'billing', label: 'חיוב' },
 ];
 
-export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSelectedPetId }: VisitFormProps) => {
+export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSelectedPetId, visitId: propVisitId, onFormDirtyChange, submitRef }: VisitFormProps) => {
   const { clinicId } = useClinic();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
@@ -136,6 +150,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(preSelectedClientId || '');
   const [activeTab, setActiveTab] = useState('basic');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // State for new price item dialog
   const [showNewPriceItemDialog, setShowNewPriceItemDialog] = useState(false);
@@ -147,7 +162,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   });
   const [savingPriceItem, setSavingPriceItem] = useState(false);
 
-  const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<VisitFormData>({
+  const formMethods = useForm<VisitFormData>({
     resolver: zodResolver(visitSchema),
     defaultValues: {
       client_id: preSelectedClientId || '',
@@ -172,6 +187,60 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       follow_ups: [],
     },
   });
+
+  const { register, handleSubmit, watch, setValue, reset, control, formState: { errors, isDirty } } = formMethods;
+
+  // Use the auto-save hook
+  const visitId = propVisitId || visit?.id;
+  useVisitAutoSave({
+    visitId,
+    clinicId,
+    formMethods,
+    enabled: !!visitId,
+  });
+
+  // Warn before leaving page with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = 'יש שינויים שלא נשמרו. האם לצאת?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // Notify parent when form changes - directly track any change
+  useEffect(() => {
+    if (!onFormDirtyChange) return;
+
+    // Subscribe to all form changes
+    const subscription = watch((data, { name }) => {
+      // Any change means the form is dirty
+      if (name) {
+        onFormDirtyChange(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [watch, onFormDirtyChange]);
+
+  // Handle cancel with confirmation if there are unsaved changes
+  const handleCancelClick = () => {
+    if (isDirty) {
+      setShowCancelConfirm(true);
+    } else {
+      onCancel();
+    }
+  };
+
+  const handleConfirmCancel = () => {
+    setShowCancelConfirm(false);
+    onCancel();
+  };
 
   const { fields: diagnosesFields, append: appendDiagnosis, remove: removeDiagnosis } = useFieldArray({
     control,
@@ -233,34 +302,8 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
         vaccinationType = parts[1] || '';
       }
 
-      // Set form values
-      setValue('client_id', visit.client_id);
-      setValue('pet_id', visit.pet_id);
-      setValue('visit_type', visitType);
-      setValue('vaccination_type', vaccinationType);
-      setValue('visit_date', visit.visit_date.slice(0, 16));
-      setValue('chief_complaint', visit.chief_complaint || '');
-      setValue('general_history', (visit as any).general_history || '');
-      setValue('medical_history', (visit as any).medical_history || '');
-      setValue('current_history', (visit as any).current_history || '');
-      setValue('physical_exam', visit.physical_exam || '');
-      setValue('additional_tests', (visit as any).additional_tests || '');
-      setValue('recommendations', visit.recommendations || '');
-      setValue('client_summary', visit.client_summary || '');
-      setValue('status', visit.status as 'open' | 'completed' | 'cancelled');
-
-      // Set arrays
-      if (Array.isArray(visit.diagnoses)) {
-        setValue('diagnoses', visit.diagnoses as any);
-      }
-      if (Array.isArray(visit.treatments)) {
-        setValue('treatments', visit.treatments as any);
-      }
-      if (Array.isArray(visit.medications)) {
-        setValue('medications', visit.medications as any);
-      }
-
       // Load price items for this visit
+      let priceItemsData: { item_id: string; quantity: number }[] = [];
       if (clinicId) {
         const { data: visitPriceItems } = await supabase
           .from('visit_price_items')
@@ -268,20 +311,43 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           .eq('visit_id', visit.id);
 
         if (visitPriceItems && visitPriceItems.length > 0) {
-          const priceItemsData = visitPriceItems.map((item: any) => ({
+          priceItemsData = visitPriceItems.map((item: any) => ({
             item_id: item.price_item_id,
             quantity: item.quantity,
           }));
-          setValue('price_items', priceItemsData);
         }
       }
+
+      // Use reset to set all values at once - this keeps isDirty = false
+      reset({
+        client_id: visit.client_id,
+        pet_id: visit.pet_id,
+        visit_type: visitType,
+        vaccination_type: vaccinationType,
+        vaccination_date: new Date().toISOString().slice(0, 10),
+        visit_date: visit.visit_date.slice(0, 16),
+        chief_complaint: visit.chief_complaint || '',
+        general_history: (visit as any).general_history || '',
+        medical_history: (visit as any).medical_history || '',
+        current_history: (visit as any).current_history || '',
+        physical_exam: visit.physical_exam || '',
+        additional_tests: (visit as any).additional_tests || '',
+        diagnoses: Array.isArray(visit.diagnoses) ? visit.diagnoses as any : [],
+        treatments: Array.isArray(visit.treatments) ? visit.treatments as any : [],
+        medications: Array.isArray(visit.medications) ? visit.medications as any : [],
+        recommendations: visit.recommendations || '',
+        client_summary: visit.client_summary || '',
+        status: visit.status as 'open' | 'completed' | 'cancelled',
+        price_items: priceItemsData,
+        follow_ups: [],
+      });
 
       // Set selected client to fetch pets
       setSelectedClientId(visit.client_id);
     };
 
     loadVisitData();
-  }, [visit, clinicId, setValue]);
+  }, [visit, clinicId, reset]);
 
   const fetchClients = async () => {
     if (!clinicId) return;
@@ -427,6 +493,20 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     });
   };
 
+  // Set up submit ref for external triggering (after onSubmit is defined)
+  useEffect(() => {
+    if (submitRef) {
+      submitRef.current = () => {
+        handleSubmit(onSubmit)();
+      };
+    }
+    return () => {
+      if (submitRef) {
+        submitRef.current = null;
+      }
+    };
+  }, [submitRef, handleSubmit, onSubmit]);
+
   return (
     <Card className="border-2 border-primary/20">
       <CardHeader>
@@ -434,7 +514,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           <CardTitle className="text-right">
             {visit ? 'עריכת ביקור' : 'הוספת ביקור חדש'}
           </CardTitle>
-          <Button variant="ghost" size="icon" onClick={onCancel}>
+          <Button variant="ghost" size="icon" onClick={handleCancelClick}>
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -910,7 +990,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
             <Button type="submit">
               {visit ? 'עדכן' : 'הוסף ביקור'}
             </Button>
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button type="button" variant="outline" onClick={handleCancelClick}>
               ביטול
             </Button>
           </div>
@@ -1009,6 +1089,24 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmation dialog for unsaved changes */}
+      <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-right">יש שינויים שלא נשמרו</AlertDialogTitle>
+            <AlertDialogDescription className="text-right">
+              האם את בטוחה שברצונך לצאת? השינויים שלא נשמרו יאבדו.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogCancel>המשך לערוך</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmCancel}>
+              צא בלי לשמור
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

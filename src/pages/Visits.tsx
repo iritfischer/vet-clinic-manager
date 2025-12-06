@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { VisitDialog } from '@/components/visits/VisitDialog';
 import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
 import { useToast } from '@/hooks/use-toast';
 import { TableToolbar } from '@/components/shared/TableToolbar';
+import { loadDraftFromLocalStorage, clearDraftFromLocalStorage } from '@/hooks/useVisitAutoSave';
 
 type Visit = Tables<'visits'> & {
   clients?: Tables<'clients'> | null;
@@ -21,6 +22,8 @@ const Visits = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVisit, setEditingVisit] = useState<Visit | null>(null);
+  const [draftVisitId, setDraftVisitId] = useState<string | null>(null);
+  const [draftDataToRestore, setDraftDataToRestore] = useState<Record<string, unknown> | null>(null);
   const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
   const [summaryVisit, setSummaryVisit] = useState<Visit | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,6 +31,31 @@ const Visits = () => {
   const [typeFilter, setTypeFilter] = useState('all');
   const { clinicId } = useClinic();
   const { toast } = useToast();
+
+  // Check for existing draft when opening new visit dialog
+  const checkForExistingDraft = useCallback(async () => {
+    if (!clinicId) return false;
+
+    const localDraft = loadDraftFromLocalStorage(clinicId);
+    if (localDraft) {
+      // Found draft in localStorage - use its visitId and data
+      setDraftVisitId(localDraft.visitId);
+      setDraftDataToRestore(localDraft.data);
+      return true;
+    }
+    return false;
+  }, [clinicId]);
+
+  // Handle opening new visit dialog
+  const handleOpenNewVisit = useCallback(async () => {
+    // First check for existing draft
+    const hasDraft = await checkForExistingDraft();
+    if (!hasDraft) {
+      // No existing draft - will create new one in dialog
+      setDraftDataToRestore(null);
+    }
+    setDialogOpen(true);
+  }, [checkForExistingDraft]);
 
   // Filter visits based on search and filters
   const filteredVisits = useMemo(() => {
@@ -79,6 +107,56 @@ const Visits = () => {
     }
   };
 
+  // Create a draft visit for auto-save functionality
+  const createDraftVisit = async (): Promise<string | null> => {
+    if (!clinicId) return null;
+
+    try {
+      const { data: newVisit, error } = await supabase
+        .from('visits')
+        .insert({
+          clinic_id: clinicId,
+          visit_date: new Date().toISOString(),
+          status: 'open',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setDraftVisitId(newVisit.id);
+      return newVisit.id;
+    } catch (error) {
+      console.error('Error creating draft visit:', error);
+      return null;
+    }
+  };
+
+  // Delete a draft visit if it's empty (no client/pet selected)
+  const deleteDraftVisit = async (visitId: string) => {
+    if (!visitId) return;
+
+    try {
+      // Check if the visit has required data (client and pet)
+      const { data: visit } = await supabase
+        .from('visits')
+        .select('client_id, pet_id')
+        .eq('id', visitId)
+        .single();
+
+      // Only delete if both client_id and pet_id are null
+      if (visit && !visit.client_id && !visit.pet_id) {
+        await supabase
+          .from('visits')
+          .delete()
+          .eq('id', visitId);
+      }
+    } catch (error) {
+      console.error('Error deleting draft visit:', error);
+    } finally {
+      setDraftVisitId(null);
+    }
+  };
+
   const handleSave = async (data: any) => {
     if (!clinicId) return;
 
@@ -112,14 +190,17 @@ const Visits = () => {
 
       let visitId: string;
 
-      if (editingVisit) {
+      if (editingVisit || draftVisitId) {
+        // Update existing visit (either editing or saving a draft)
+        const targetVisitId = editingVisit?.id || draftVisitId!;
+
         const { error } = await supabase
           .from('visits')
           .update(visitData)
-          .eq('id', editingVisit.id);
+          .eq('id', targetVisitId);
 
         if (error) throw error;
-        visitId = editingVisit.id;
+        visitId = targetVisitId;
 
         // Delete existing price items
         await supabase
@@ -127,7 +208,12 @@ const Visits = () => {
           .delete()
           .eq('visit_id', visitId);
 
-        toast({ title: 'הביקור עודכן בהצלחה' });
+        toast({ title: editingVisit ? 'הביקור עודכן בהצלחה' : 'הביקור נשמר בהצלחה' });
+
+        // Clear draft state
+        if (draftVisitId) {
+          setDraftVisitId(null);
+        }
       } else {
         // Create a clean object with only the columns that exist in the visits table
         const dataToInsert = {
@@ -233,6 +319,9 @@ const Visits = () => {
         }
       }
 
+      // Clear draft state and localStorage on successful save
+      clearDraftFromLocalStorage();
+      setDraftDataToRestore(null);
       setDialogOpen(false);
       setEditingVisit(null);
       fetchVisits();
@@ -298,9 +387,16 @@ const Visits = () => {
     setSummaryDialogOpen(true);
   };
 
-  const handleCloseDialog = () => {
+  const handleCloseDialog = async () => {
+    // Delete draft if closing without saving
+    if (draftVisitId) {
+      await deleteDraftVisit(draftVisitId);
+    }
+    // Clear localStorage draft
+    clearDraftFromLocalStorage();
     setDialogOpen(false);
     setEditingVisit(null);
+    setDraftDataToRestore(null);
   };
 
   return (
@@ -313,7 +409,7 @@ const Visits = () => {
               תיעוד מלא של כל ביקור רפואי במרפאה
             </p>
           </div>
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button onClick={handleOpenNewVisit}>
             <Plus className="h-4 w-4 ml-2" />
             ביקור חדש
           </Button>
@@ -376,6 +472,10 @@ const Visits = () => {
           onClose={handleCloseDialog}
           onSave={handleSave}
           visit={editingVisit}
+          clinicId={clinicId}
+          onCreateDraft={createDraftVisit}
+          draftVisitId={draftVisitId}
+          draftDataToRestore={draftDataToRestore}
         />
 
         <VisitSummaryDialog

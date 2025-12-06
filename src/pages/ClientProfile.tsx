@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -86,6 +96,20 @@ const ClientProfile = () => {
   // Selected pet for sidebar display
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
   const selectedPet = pets.find(p => p.id === selectedPetId) || pets[0] || null;
+
+  // Track unsaved changes in VisitForm
+  const [visitFormIsDirty, setVisitFormIsDirty] = useState(false);
+
+  // Controlled pet sub-tabs (track current tab for each pet)
+  const [petSubTabs, setPetSubTabs] = useState<Record<string, string>>({});
+
+  // Pending tab change confirmation
+  const [pendingTabChange, setPendingTabChange] = useState<{ petId: string; newTab: string } | null>(null);
+  const [showTabChangeConfirm, setShowTabChangeConfirm] = useState(false);
+  const [saveAndSwitchPending, setSaveAndSwitchPending] = useState<{ petId: string; newTab: string } | null>(null);
+
+  // Ref to trigger form submission
+  const formSubmitRef = useRef<(() => void) | null>(null);
 
   // סוגי חיסונים
   const VACCINATION_TYPES = {
@@ -275,8 +299,15 @@ const ClientProfile = () => {
           : 'הביקור נוסף בהצלחה',
       });
 
+      // Check if we need to switch tabs after saving
+      if (saveAndSwitchPending) {
+        setPetSubTabs(prev => ({ ...prev, [saveAndSwitchPending.petId]: saveAndSwitchPending.newTab }));
+        setSaveAndSwitchPending(null);
+      }
+
       setShowNewVisitForm(false);
       setSelectedPetForNewVisit(null);
+      setVisitFormIsDirty(false);
       fetchClientData();
     } catch (error: any) {
       toast({
@@ -284,6 +315,7 @@ const ClientProfile = () => {
         description: error.message,
         variant: 'destructive',
       });
+      setSaveAndSwitchPending(null);
     }
   };
 
@@ -359,9 +391,16 @@ const ClientProfile = () => {
         description: 'הביקור עודכן בהצלחה',
       });
 
+      // Check if we need to switch tabs after saving
+      if (saveAndSwitchPending) {
+        setPetSubTabs(prev => ({ ...prev, [saveAndSwitchPending.petId]: saveAndSwitchPending.newTab }));
+        setSaveAndSwitchPending(null);
+      }
+
       setEditingVisit(null);
       setShowNewVisitForm(false);
       setSelectedPetForNewVisit(null);
+      setVisitFormIsDirty(false);
       fetchClientData();
     } catch (error: any) {
       toast({
@@ -369,6 +408,7 @@ const ClientProfile = () => {
         description: error.message,
         variant: 'destructive',
       });
+      setSaveAndSwitchPending(null);
     }
   };
 
@@ -642,6 +682,48 @@ const ClientProfile = () => {
         date: format(new Date(m.date), 'dd/MM/yy', { locale: he }),
         weight: m.weight
       }));
+  };
+
+  // Handle pet sub-tab changes with dirty form check
+  const handlePetSubTabChange = (petId: string, newTab: string) => {
+    // If form has unsaved changes, show confirmation
+    if (visitFormIsDirty) {
+      setPendingTabChange({ petId, newTab });
+      setShowTabChangeConfirm(true);
+    } else {
+      setPetSubTabs(prev => ({ ...prev, [petId]: newTab }));
+    }
+  };
+
+  // Confirm tab change (discard changes)
+  const handleConfirmTabChange = () => {
+    if (pendingTabChange) {
+      setPetSubTabs(prev => ({ ...prev, [pendingTabChange.petId]: pendingTabChange.newTab }));
+      setVisitFormIsDirty(false);
+      setShowNewVisitForm(false);
+      setEditingVisit(null);
+    }
+    setShowTabChangeConfirm(false);
+    setPendingTabChange(null);
+  };
+
+  // Cancel tab change (keep editing)
+  const handleCancelTabChange = () => {
+    setShowTabChangeConfirm(false);
+    setPendingTabChange(null);
+  };
+
+  // Save and then switch tab
+  const handleSaveAndSwitch = () => {
+    if (pendingTabChange) {
+      setSaveAndSwitchPending(pendingTabChange);
+    }
+    setShowTabChangeConfirm(false);
+    setPendingTabChange(null);
+    // Trigger form submission
+    if (formSubmitRef.current) {
+      formSubmitRef.current();
+    }
   };
 
   if (loading || !client) {
@@ -983,14 +1065,79 @@ const ClientProfile = () => {
                 {pets.map((pet) => (
                   <TabsContent key={pet.id} value={pet.id} className="space-y-4 mt-6">
                     {/* Sub-tabs for each pet - Orange theme */}
-                    <Tabs defaultValue="visits" className="w-full" dir="rtl">
+                    <Tabs
+                      value={petSubTabs[pet.id] || 'visits'}
+                      onValueChange={(value) => handlePetSubTabChange(pet.id, value)}
+                      className="w-full"
+                      dir="rtl"
+                    >
                       <TabsList className="w-full grid grid-cols-6 h-auto bg-orange-100 border-2 border-orange-300 rounded-lg p-1">
-                        <TabsTrigger value="details" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">פרטי החיה</TabsTrigger>
-                        <TabsTrigger value="metrics" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">מדדים</TabsTrigger>
-                        <TabsTrigger value="visits" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">ציר זמן</TabsTrigger>
-                        <TabsTrigger value="vaccinations" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">חיסונים</TabsTrigger>
-                        <TabsTrigger value="prescriptions" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">מרשמים</TabsTrigger>
-                        <TabsTrigger value="lab" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors">מסמכים מעבדה</TabsTrigger>
+                        <TabsTrigger
+                          value="details"
+                          className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors"
+                          onClick={(e) => {
+                            if (visitFormIsDirty) {
+                              e.preventDefault();
+                              setPendingTabChange({ petId: pet.id, newTab: 'details' });
+                              setShowTabChangeConfirm(true);
+                            }
+                          }}
+                        >פרטי החיה</TabsTrigger>
+                        <TabsTrigger
+                          value="metrics"
+                          className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors"
+                          onClick={(e) => {
+                            if (visitFormIsDirty) {
+                              e.preventDefault();
+                              setPendingTabChange({ petId: pet.id, newTab: 'metrics' });
+                              setShowTabChangeConfirm(true);
+                            }
+                          }}
+                        >מדדים</TabsTrigger>
+                        <TabsTrigger
+                          value="visits"
+                          className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors"
+                          onClick={(e) => {
+                            if (visitFormIsDirty) {
+                              e.preventDefault();
+                              setPendingTabChange({ petId: pet.id, newTab: 'visits' });
+                              setShowTabChangeConfirm(true);
+                            }
+                          }}
+                        >ציר זמן</TabsTrigger>
+                        <TabsTrigger
+                          value="vaccinations"
+                          className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors"
+                          onClick={(e) => {
+                            if (visitFormIsDirty) {
+                              e.preventDefault();
+                              setPendingTabChange({ petId: pet.id, newTab: 'vaccinations' });
+                              setShowTabChangeConfirm(true);
+                            }
+                          }}
+                        >חיסונים</TabsTrigger>
+                        <TabsTrigger
+                          value="prescriptions"
+                          className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors"
+                          onClick={(e) => {
+                            if (visitFormIsDirty) {
+                              e.preventDefault();
+                              setPendingTabChange({ petId: pet.id, newTab: 'prescriptions' });
+                              setShowTabChangeConfirm(true);
+                            }
+                          }}
+                        >מרשמים</TabsTrigger>
+                        <TabsTrigger
+                          value="lab"
+                          className="data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md hover:bg-orange-200 transition-colors"
+                          onClick={(e) => {
+                            if (visitFormIsDirty) {
+                              e.preventDefault();
+                              setPendingTabChange({ petId: pet.id, newTab: 'lab' });
+                              setShowTabChangeConfirm(true);
+                            }
+                          }}
+                        >מסמכים מעבדה</TabsTrigger>
                       </TabsList>
 
                       {/* Pet Details Tab */}
@@ -1464,6 +1611,11 @@ const ClientProfile = () => {
                       <TabsContent value="visits" className="mt-6">
                         {(showNewVisitForm && selectedPetForNewVisit === pet.id) || (editingVisit && editingVisit.pet_id === pet.id) ? (
                           <Card className="mb-6">
+                            {visitFormIsDirty && (
+                              <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 text-yellow-800 text-sm text-right">
+                                יש שינויים שלא נשמרו
+                              </div>
+                            )}
                             <CardContent className="p-4">
                               <VisitForm
                                 onSave={editingVisit ? handleEditVisit : handleNewVisit}
@@ -1471,10 +1623,13 @@ const ClientProfile = () => {
                                   setShowNewVisitForm(false);
                                   setSelectedPetForNewVisit(null);
                                   setEditingVisit(null);
+                                  setVisitFormIsDirty(false);
                                 }}
                                 visit={editingVisit}
                                 preSelectedClientId={client.id}
                                 preSelectedPetId={pet.id}
+                                onFormDirtyChange={setVisitFormIsDirty}
+                                submitRef={formSubmitRef}
                               />
                             </CardContent>
                           </Card>
@@ -1752,6 +1907,27 @@ const ClientProfile = () => {
         onSave={handlePetSave}
         defaultClientId={client.id}
       />
+
+      {/* Tab change confirmation dialog */}
+      <AlertDialog open={showTabChangeConfirm} onOpenChange={setShowTabChangeConfirm}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-right">יש שינויים שלא נשמרו</AlertDialogTitle>
+            <AlertDialogDescription className="text-right">
+              האם את בטוחה שברצונך לעבור לטאב אחר? השינויים שלא נשמרו יאבדו.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogCancel onClick={handleCancelTabChange}>המשך לערוך</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveAndSwitch} className="bg-primary">
+              שמור והמשך
+            </AlertDialogAction>
+            <AlertDialogAction onClick={handleConfirmTabChange} className="bg-destructive hover:bg-destructive/90">
+              עבור בלי לשמור
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 };

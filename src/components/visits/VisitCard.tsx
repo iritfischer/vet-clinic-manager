@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
+import { useVisitAutoSave } from '@/hooks/useVisitAutoSave';
 
 type Visit = Tables<'visits'> & {
   clients?: Tables<'clients'> | null;
@@ -65,6 +66,10 @@ interface VisitCardProps {
   mode?: 'view' | 'edit';
   onSave?: (data: any) => void;
   onCancel?: () => void;
+  visitId?: string;
+  clinicId?: string | null;
+  draftDataToRestore?: Record<string, unknown> | null;
+  onFormChange?: () => void;
 }
 
 const statusConfig = {
@@ -73,14 +78,16 @@ const statusConfig = {
   cancelled: { label: 'בוטל', variant: 'destructive' as const },
 };
 
-export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardProps) => {
-  const { clinicId } = useClinic();
+export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: propVisitId, clinicId: propClinicId, draftDataToRestore, onFormChange }: VisitCardProps) => {
+  const { clinicId: hookClinicId } = useClinic();
+  const clinicId = propClinicId || hookClinicId;
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(visit?.client_id || '');
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
-  const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<VisitFormData>({
+  const formMethods = useForm<VisitFormData>({
     resolver: zodResolver(visitSchema),
     defaultValues: {
       client_id: visit?.client_id || '',
@@ -99,6 +106,56 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel }: VisitCardP
       price_items: [],
     },
   });
+
+  const { register, handleSubmit, watch, setValue, control, formState: { errors, isDirty } } = formMethods;
+
+  // Use the auto-save hook for editing mode
+  const visitId = propVisitId || visit?.id;
+  useVisitAutoSave({
+    visitId,
+    clinicId,
+    formMethods,
+    enabled: mode === 'edit' && !!visitId,
+  });
+
+  // Warn before leaving page with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty && mode === 'edit') {
+        e.preventDefault();
+        e.returnValue = 'יש שינויים שלא נשמרו. האם לצאת?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty, mode]);
+
+  // Notify parent when form has unsaved changes
+  useEffect(() => {
+    if (isDirty && onFormChange) {
+      onFormChange();
+    }
+  }, [isDirty, onFormChange]);
+
+  // Restore draft data from localStorage if available
+  useEffect(() => {
+    if (draftDataToRestore && !hasRestoredDraft) {
+      // Restore each field from the draft
+      Object.entries(draftDataToRestore).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          setValue(key as keyof VisitFormData, value as any);
+
+          // Also update selectedClientId if client_id is being restored
+          if (key === 'client_id' && typeof value === 'string') {
+            setSelectedClientId(value);
+          }
+        }
+      });
+      setHasRestoredDraft(true);
+    }
+  }, [draftDataToRestore, hasRestoredDraft, setValue]);
 
   const { fields: diagnosesFields, append: appendDiagnosis, remove: removeDiagnosis } = useFieldArray({
     control,
