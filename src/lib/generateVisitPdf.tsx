@@ -39,17 +39,24 @@ export const generateVisitPdfFromElement = async (element: HTMLElement): Promise
   const pdf = new jsPDF('p', 'mm', 'a4');
   const imgData = canvas.toDataURL('image/png');
 
-  // Add image to PDF - handle multiple pages if needed
-  let heightLeft = imgHeight;
-  let position = 0;
+  // Add image to PDF
+  if (imgHeight <= pageHeight) {
+    // Single page
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+  } else {
+    // Multiple pages - simple split (header/footer won't repeat)
+    let heightLeft = imgHeight;
+    let position = 0;
 
-  while (heightLeft > 0) {
-    if (position !== 0) {
-      pdf.addPage();
-    }
     pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
-    position -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
   }
 
   // Return as blob
