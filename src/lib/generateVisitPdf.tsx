@@ -37,26 +37,41 @@ export const generateVisitPdfFromElement = async (element: HTMLElement): Promise
 
   // Create PDF
   const pdf = new jsPDF('p', 'mm', 'a4');
-  const imgData = canvas.toDataURL('image/png');
 
-  // Add image to PDF
-  if (imgHeight <= pageHeight) {
-    // Single page
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-  } else {
-    // Multiple pages - simple split (header/footer won't repeat)
-    let heightLeft = imgHeight;
-    let position = 0;
+  // Add image to PDF - slice canvas for each page
+  const totalPages = Math.ceil(imgHeight / pageHeight);
 
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
+  for (let page = 0; page < totalPages; page++) {
+    if (page > 0) {
       pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
     }
+
+    // Calculate source Y position in canvas pixels
+    const scaleFactor = canvas.width / imgWidth;
+    const sourceY = page * pageHeight * scaleFactor;
+    const sourceHeight = Math.min(
+      pageHeight * scaleFactor,
+      canvas.height - sourceY
+    );
+
+    // Create a canvas slice for this page
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sourceHeight;
+
+    const ctx = pageCanvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(
+        canvas,
+        0, sourceY, canvas.width, sourceHeight,
+        0, 0, canvas.width, sourceHeight
+      );
+    }
+
+    const pageImgData = pageCanvas.toDataURL('image/png');
+    const pageImgHeight = (sourceHeight * imgWidth) / canvas.width;
+
+    pdf.addImage(pageImgData, 'PNG', 0, 0, imgWidth, pageImgHeight);
   }
 
   // Return as blob
