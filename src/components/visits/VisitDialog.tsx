@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { VisitCard } from './VisitCard';
+import { VisitForm } from './VisitForm';
 
 type Visit = Tables<'visits'> & {
   clients?: Tables<'clients'> | null;
@@ -98,15 +98,13 @@ export const VisitDialog = ({
             </DialogTitle>
           </DialogHeader>
 
-          <VisitCard
+          <VisitForm
             visit={visit}
-            mode="edit"
             onSave={handleSave}
             onCancel={handleCloseAttempt}
             visitId={visitId}
-            clinicId={clinicId}
             draftDataToRestore={draftDataToRestore}
-            onFormChange={handleFormChange}
+            onFormDirtyChange={handleFormChange}
           />
         </DialogContent>
       </Dialog>

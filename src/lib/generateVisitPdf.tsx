@@ -5,73 +5,186 @@ import { VisitSummaryData } from './visitSummaryTypes';
 import { sendWhatsAppMessage, WhatsAppConfig } from './whatsappService';
 
 export const generateVisitPdfFromElement = async (element: HTMLElement): Promise<Blob> => {
-  // Create canvas from the HTML element
-  const canvas = await html2canvas(element, {
-    scale: 2, // Higher quality
-    useCORS: true, // Allow cross-origin images
-    backgroundColor: '#ffffff',
-    logging: false,
-    scrollX: 0,
-    scrollY: -window.scrollY,
-    windowWidth: element.scrollWidth,
-    windowHeight: element.scrollHeight,
-    width: element.scrollWidth,
-    height: element.scrollHeight,
-    onclone: (_clonedDoc, clonedElement) => {
-      // Ensure the cloned element has no overflow issues
-      clonedElement.style.overflow = 'visible';
-      clonedElement.style.height = 'auto';
-      // Make sure parent containers don't clip content
-      let parent = clonedElement.parentElement;
-      while (parent) {
-        parent.style.overflow = 'visible';
-        parent = parent.parentElement;
-      }
-    },
-  });
+  // If element is a wrapper, try to find the actual content element
+  let targetElement = element;
+  const firstChild = element.firstElementChild as HTMLElement;
+  if (firstChild && firstChild.scrollHeight > element.scrollHeight) {
+    targetElement = firstChild;
+  }
 
-  // Calculate dimensions for A4 page
+  // Find header, content, and footer elements
+  const headerElement = targetElement.querySelector('[data-pdf-header="true"]') as HTMLElement;
+  const contentElement = targetElement.querySelector('[data-pdf-content="true"]') as HTMLElement;
+  const footerElement = targetElement.querySelector('[data-pdf-footer="true"]') as HTMLElement;
+
+  // Ensure elements are visible and properly sized
+  const originalOverflow = targetElement.style.overflow;
+  const originalHeight = targetElement.style.height;
+  const originalParentOverflow = targetElement.parentElement?.style.overflow || '';
+  
+  targetElement.style.overflow = 'visible';
+  targetElement.style.height = 'auto';
+  if (targetElement.parentElement) {
+    targetElement.parentElement.style.overflow = 'visible';
+  }
+
+  // Wait a bit for layout to stabilize
+  await new Promise(resolve => setTimeout(resolve, 200));
+
+  // Helper function to create canvas from element
+  const createElementCanvas = async (elem: HTMLElement) => {
+    const width = elem.scrollWidth || elem.offsetWidth || 794;
+    const height = elem.scrollHeight || elem.offsetHeight;
+    
+    return await html2canvas(elem, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      width,
+      height,
+      allowTaint: false,
+      onclone: (clonedDoc, clonedElem) => {
+        clonedElem.style.overflow = 'visible';
+        clonedElem.style.height = 'auto';
+        clonedElem.style.maxHeight = 'none';
+        let parent = clonedElem.parentElement;
+        while (parent && parent !== clonedDoc.body) {
+          parent.style.overflow = 'visible';
+          parent.style.height = 'auto';
+          parent.style.maxHeight = 'none';
+          parent = parent.parentElement;
+        }
+      },
+    });
+  };
+
+  // Create canvases for header, content, and footer
+  const headerCanvas = headerElement ? await createElementCanvas(headerElement) : null;
+  const contentCanvas = contentElement ? await createElementCanvas(contentElement) : null;
+  const footerCanvas = footerElement ? await createElementCanvas(footerElement) : null;
+
+  // Restore original styles
+  targetElement.style.overflow = originalOverflow;
+  targetElement.style.height = originalHeight;
+  if (targetElement.parentElement) {
+    targetElement.parentElement.style.overflow = originalParentOverflow;
+  }
+
+  // A4 page dimensions in mm
   const imgWidth = 210; // A4 width in mm
   const pageHeight = 297; // A4 height in mm
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
   // Create PDF
   const pdf = new jsPDF('p', 'mm', 'a4');
 
-  // Add image to PDF - slice canvas for each page
-  const totalPages = Math.ceil(imgHeight / pageHeight);
+  if (!contentCanvas) {
+    // Fallback: if no content element found, use the whole element
+    const fullCanvas = await createElementCanvas(targetElement);
+    const pixelsPerMm = fullCanvas.width / imgWidth;
+    const fullImgHeightMm = fullCanvas.height / pixelsPerMm;
+    const totalPages = Math.ceil(fullImgHeightMm / pageHeight);
+    const pageHeightInPixels = pageHeight * pixelsPerMm;
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) pdf.addPage();
+      const sourceY = Math.floor(page * pageHeightInPixels);
+      const sourceHeight = Math.min(Math.ceil(pageHeightInPixels), fullCanvas.height - sourceY);
+      
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = fullCanvas.width;
+      pageCanvas.height = sourceHeight;
+      const ctx = pageCanvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(fullCanvas, 0, sourceY, fullCanvas.width, sourceHeight, 0, 0, fullCanvas.width, sourceHeight);
+      }
+      const pageImgData = pageCanvas.toDataURL('image/png', 1.0);
+      const pageImgHeightMm = sourceHeight / pixelsPerMm;
+      pdf.addImage(pageImgData, 'PNG', 0, 0, imgWidth, pageImgHeightMm);
+    }
+    return pdf.output('blob');
+  }
+
+  // Calculate dimensions
+  const pixelsPerMm = contentCanvas.width / imgWidth;
+  
+  // Calculate header and footer heights in mm
+  const headerHeightMm = headerCanvas ? headerCanvas.height / pixelsPerMm : 0;
+  const footerHeightMm = footerCanvas ? footerCanvas.height / pixelsPerMm : 0;
+  
+  // Available height for content per page (page height minus header and footer)
+  const availableContentHeightMm = pageHeight - headerHeightMm - footerHeightMm;
+  
+  // Calculate content height in mm
+  const contentHeightMm = contentCanvas.height / pixelsPerMm;
+  
+  // Calculate how many pages we need for content
+  const totalPages = Math.max(1, Math.ceil(contentHeightMm / availableContentHeightMm));
+
+  // Height of content per page in pixels
+  const contentPageHeightInPixels = (availableContentHeightMm * pixelsPerMm);
+
+  // Convert header and footer to images
+  const headerImgData = headerCanvas ? headerCanvas.toDataURL('image/png', 1.0) : null;
+  const footerImgData = footerCanvas ? footerCanvas.toDataURL('image/png', 1.0) : null;
 
   for (let page = 0; page < totalPages; page++) {
     if (page > 0) {
       pdf.addPage();
     }
 
-    // Calculate source Y position in canvas pixels
-    const scaleFactor = canvas.width / imgWidth;
-    const sourceY = page * pageHeight * scaleFactor;
-    const sourceHeight = Math.min(
-      pageHeight * scaleFactor,
-      canvas.height - sourceY
-    );
+    let currentY = 0;
 
-    // Create a canvas slice for this page
-    const pageCanvas = document.createElement('canvas');
-    pageCanvas.width = canvas.width;
-    pageCanvas.height = sourceHeight;
-
-    const ctx = pageCanvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(
-        canvas,
-        0, sourceY, canvas.width, sourceHeight,
-        0, 0, canvas.width, sourceHeight
-      );
+    // Add header to every page
+    if (headerImgData && headerCanvas) {
+      const headerHeightMmActual = headerCanvas.height / pixelsPerMm;
+      pdf.addImage(headerImgData, 'PNG', 0, currentY, imgWidth, headerHeightMmActual);
+      currentY += headerHeightMmActual;
     }
 
-    const pageImgData = pageCanvas.toDataURL('image/png');
-    const pageImgHeight = (sourceHeight * imgWidth) / canvas.width;
+    // Calculate content slice for this page
+    const contentSourceY = Math.floor(page * contentPageHeightInPixels);
+    const remainingContentHeight = contentCanvas.height - contentSourceY;
+    const contentSourceHeight = Math.min(Math.ceil(contentPageHeightInPixels), remainingContentHeight);
 
-    pdf.addImage(pageImgData, 'PNG', 0, 0, imgWidth, pageImgHeight);
+    if (contentSourceHeight > 0 && contentSourceY < contentCanvas.height) {
+      // Create a canvas for this content slice
+      const contentPageCanvas = document.createElement('canvas');
+      contentPageCanvas.width = contentCanvas.width;
+      contentPageCanvas.height = contentSourceHeight;
+
+      const ctx = contentPageCanvas.getContext('2d', { willReadFrequently: false });
+      if (ctx) {
+        // Fill with white background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, contentPageCanvas.width, contentPageCanvas.height);
+
+        // Draw the content slice
+        ctx.drawImage(
+          contentCanvas,
+          0, contentSourceY, contentCanvas.width, contentSourceHeight,  // Source
+          0, 0, contentCanvas.width, contentSourceHeight                // Destination
+        );
+      }
+
+      // Convert to image
+      const contentPageImgData = contentPageCanvas.toDataURL('image/png', 1.0);
+      const contentPageImgHeightMm = contentSourceHeight / pixelsPerMm;
+      
+      // Add content to PDF
+      pdf.addImage(contentPageImgData, 'PNG', 0, currentY, imgWidth, contentPageImgHeightMm);
+      currentY += contentPageImgHeightMm;
+    }
+
+    // Add footer to every page
+    if (footerImgData && footerCanvas) {
+      const footerHeightMmActual = footerCanvas.height / pixelsPerMm;
+      pdf.addImage(footerImgData, 'PNG', 0, pageHeight - footerHeightMmActual, imgWidth, footerHeightMmActual);
+    }
   }
 
   // Return as blob

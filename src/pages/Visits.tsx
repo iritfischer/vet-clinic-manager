@@ -11,6 +11,7 @@ import { VisitSummaryDialog } from '@/components/visits/VisitSummaryDialog';
 import { useToast } from '@/hooks/use-toast';
 import { TableToolbar } from '@/components/shared/TableToolbar';
 import { loadDraftFromLocalStorage, clearDraftFromLocalStorage } from '@/hooks/useVisitAutoSave';
+import { useSearchParams } from 'react-router-dom';
 
 type Visit = Tables<'visits'> & {
   clients?: Tables<'clients'> | null;
@@ -29,8 +30,9 @@ const Visits = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const { clinicId } = useClinic();
+  const { clinicId, loading: clinicLoading } = useClinic();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Check for existing draft when opening new visit dialog
   const checkForExistingDraft = useCallback(async () => {
@@ -48,14 +50,14 @@ const Visits = () => {
 
   // Handle opening new visit dialog
   const handleOpenNewVisit = useCallback(async () => {
-    // First check for existing draft
-    const hasDraft = await checkForExistingDraft();
-    if (!hasDraft) {
-      // No existing draft - will create new one in dialog
-      setDraftDataToRestore(null);
-    }
+    // Reset state first to ensure clean start
+    setEditingVisit(null);
+    setDraftVisitId(null);
+    setDraftDataToRestore(null);
+    // Clear any stale localStorage draft when opening new visit
+    clearDraftFromLocalStorage();
     setDialogOpen(true);
-  }, [checkForExistingDraft]);
+  }, []);
 
   // Filter visits based on search and filters
   const filteredVisits = useMemo(() => {
@@ -75,13 +77,33 @@ const Visits = () => {
   }, [visits, searchQuery, statusFilter, typeFilter]);
 
   useEffect(() => {
+    // Wait for clinic to finish loading before fetching visits
+    if (clinicLoading) {
+      return;
+    }
+    
     if (clinicId) {
       fetchVisits();
+    } else {
+      // Clinic finished loading but no clinicId - set loading to false to show empty state
+      setLoading(false);
     }
-  }, [clinicId]);
+  }, [clinicId, clinicLoading]);
+
+  // Check for 'new=true' query parameter and open dialog automatically
+  useEffect(() => {
+    const shouldOpenNew = searchParams.get('new') === 'true';
+    if (shouldOpenNew && !clinicLoading && clinicId && !dialogOpen) {
+      handleOpenNewVisit();
+      // Remove the query parameter from URL
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, clinicLoading, clinicId, dialogOpen, handleOpenNewVisit, setSearchParams]);
 
   const fetchVisits = async () => {
-    if (!clinicId) return;
+    if (!clinicId) {
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -174,7 +196,11 @@ const Visits = () => {
         visit_date: data.visit_date,
         chief_complaint: data.chief_complaint || null,
         history: data.history || null,
+        general_history: data.general_history || null,
+        medical_history: data.medical_history || null,
+        current_history: data.current_history || null,
         physical_exam: data.physical_exam || null,
+        additional_tests: data.additional_tests || null,
         diagnoses: data.diagnoses || null,
         treatments: data.treatments || null,
         medications: data.medications || null,
@@ -224,7 +250,11 @@ const Visits = () => {
           visit_date: visitData.visit_date,
           chief_complaint: visitData.chief_complaint,
           history: visitData.history,
+          general_history: visitData.general_history,
+          medical_history: visitData.medical_history,
+          current_history: visitData.current_history,
           physical_exam: visitData.physical_exam,
+          additional_tests: visitData.additional_tests,
           diagnoses: visitData.diagnoses,
           treatments: visitData.treatments,
           medications: visitData.medications,

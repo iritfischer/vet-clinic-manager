@@ -15,8 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
-import { Plus, Trash2, X, Calendar, Syringe, PlusCircle, ChevronLeft } from 'lucide-react';
+import { Plus, Trash2, X, Calendar, Syringe, PlusCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { useVisitAutoSave } from '@/hooks/useVisitAutoSave';
@@ -130,26 +129,16 @@ interface VisitFormProps {
   visitId?: string;
   onFormDirtyChange?: (isDirty: boolean) => void;
   submitRef?: React.MutableRefObject<(() => void) | null>;
+  draftDataToRestore?: Record<string, unknown> | null;
 }
 
-// Steps for the visit form stepper
-const VISIT_STEPS = [
-  { value: 'basic', label: 'פרטים' },
-  { value: 'exam', label: 'בדיקה' },
-  { value: 'diagnosis', label: 'אבחנה' },
-  { value: 'treatment', label: 'טיפול' },
-  { value: 'followup', label: 'פולואו אפ' },
-  { value: 'billing', label: 'חיוב' },
-];
-
-export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSelectedPetId, visitId: propVisitId, onFormDirtyChange, submitRef }: VisitFormProps) => {
+export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSelectedPetId, visitId: propVisitId, onFormDirtyChange, submitRef, draftDataToRestore }: VisitFormProps) => {
   const { clinicId } = useClinic();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(preSelectedClientId || '');
-  const [activeTab, setActiveTab] = useState('basic');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // State for new price item dialog
@@ -161,6 +150,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     price_with_vat: '',
   });
   const [savingPriceItem, setSavingPriceItem] = useState(false);
+
 
   const formMethods = useForm<VisitFormData>({
     resolver: zodResolver(visitSchema),
@@ -189,6 +179,38 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   });
 
   const { register, handleSubmit, watch, setValue, reset, control, formState: { errors, isDirty } } = formMethods;
+
+  // Reset form when visit or draftDataToRestore changes to null (new visit)
+  useEffect(() => {
+    if (!visit && !draftDataToRestore) {
+      reset({
+        client_id: preSelectedClientId || '',
+        pet_id: preSelectedPetId || '',
+        visit_type: '',
+        vaccination_type: '',
+        vaccination_date: new Date().toISOString().slice(0, 10),
+        visit_date: new Date().toISOString().slice(0, 16),
+        chief_complaint: '',
+        general_history: '',
+        medical_history: '',
+        current_history: '',
+        physical_exam: '',
+        additional_tests: '',
+        diagnoses: [],
+        treatments: [],
+        medications: [],
+        recommendations: '',
+        client_summary: '',
+        status: 'open',
+        price_items: [],
+        follow_ups: [],
+      });
+      setSelectedClientId(preSelectedClientId || '');
+      setAddedToPricing(new Set());
+      setItemsNeedingPrice(new Map());
+      setNewItemPrices(new Map());
+    }
+  }, [visit, draftDataToRestore, reset, preSelectedClientId, preSelectedPetId]);
 
   // Use the auto-save hook
   const visitId = propVisitId || visit?.id;
@@ -257,6 +279,192 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     name: 'medications',
   });
 
+  // Track which items have already been added to pricing to avoid duplicates
+  const [addedToPricing, setAddedToPricing] = useState<Set<string>>(new Set());
+  // Track items that need price input (not found in pricing)
+  const [itemsNeedingPrice, setItemsNeedingPrice] = useState<Map<string, { type: 'medication' | 'treatment'; index: number; name: string; category: string }>>(new Map());
+  // Track price inputs for new items
+  const [newItemPrices, setNewItemPrices] = useState<Map<string, { price_with_vat: string; price_without_vat: string }>>(new Map());
+  const medications = watch('medications') || [];
+  const treatments = watch('treatments') || [];
+
+  // Helper function to find price item (without creating)
+  const findPriceItem = async (name: string, category: string): Promise<string | null> => {
+    if (!clinicId || !name) return null;
+
+    const { data: existingItems } = await supabase
+      .from('price_items')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('name', name)
+      .eq('category', category)
+      .limit(1);
+
+    if (existingItems && existingItems.length > 0) {
+      return existingItems[0].id;
+    }
+    return null;
+  };
+
+  // Helper function to create price item and add to pricing
+  const createAndAddPriceItem = async (name: string, category: string, priceWithVat: number, priceWithoutVat: number): Promise<string | null> => {
+    if (!clinicId) return null;
+
+    try {
+      const { data: newItem, error } = await supabase
+        .from('price_items')
+        .insert({
+          clinic_id: clinicId,
+          name: name,
+          category: category,
+          price_without_vat: priceWithoutVat,
+          price_with_vat: priceWithVat,
+          is_discountable: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Refresh price items list
+      await fetchPriceItems();
+
+      return newItem.id;
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message || 'שגיאה ביצירת פריט החיוב',
+        variant: 'destructive',
+      });
+      return null;
+    }
+  };
+
+  // Auto-add medications to pricing when medication name is entered
+  useEffect(() => {
+    if (!clinicId) return;
+    
+    medications.forEach(async (med, index) => {
+      const medicationName = med.medication?.trim() || '';
+      const key = medicationName ? `medication-${index}-${medicationName}` : `medication-${index}-empty`;
+      
+      if (medicationName) {
+        if (!addedToPricing.has(key)) {
+          const priceItemId = await findPriceItem(medicationName, 'תרופות');
+          if (priceItemId) {
+            // Item exists - add automatically
+            const currentPriceItems = watch('price_items') || [];
+            const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+            if (!exists) {
+              appendPriceItem({ item_id: priceItemId, quantity: 1 });
+            }
+            setAddedToPricing(prev => new Set(prev).add(key));
+            // Remove from items needing price if it was there
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(key);
+              return newMap;
+            });
+          } else {
+            // Item doesn't exist - mark as needing price input
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { type: 'medication', index, name: medicationName, category: 'תרופות' });
+              return newMap;
+            });
+          }
+        }
+      } else {
+        // Medication name cleared - remove from tracking
+        setItemsNeedingPrice(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(key);
+          return newMap;
+        });
+        setAddedToPricing(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(key);
+          return newSet;
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [medications, clinicId, addedToPricing]);
+
+  // Auto-add treatments to pricing when treatment name is entered
+  useEffect(() => {
+    if (!clinicId) return;
+    
+    treatments.forEach(async (treatment, index) => {
+      const treatmentName = treatment.treatment?.trim() || '';
+      const key = treatmentName ? `treatment-${index}-${treatmentName}` : `treatment-${index}-empty`;
+      
+      if (treatmentName) {
+        if (!addedToPricing.has(key)) {
+          const priceItemId = await findPriceItem(treatmentName, 'טיפולים');
+          if (priceItemId) {
+            // Item exists - add automatically
+            const currentPriceItems = watch('price_items') || [];
+            const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+            if (!exists) {
+              appendPriceItem({ item_id: priceItemId, quantity: 1 });
+            }
+            setAddedToPricing(prev => new Set(prev).add(key));
+            // Remove from items needing price if it was there
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(key);
+              return newMap;
+            });
+          } else {
+            // Item doesn't exist - mark as needing price input
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { type: 'treatment', index, name: treatmentName, category: 'טיפולים' });
+              return newMap;
+            });
+          }
+        }
+      } else {
+        // Treatment name cleared - remove from tracking
+        setItemsNeedingPrice(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(key);
+          return newMap;
+        });
+        setAddedToPricing(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(key);
+          return newSet;
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treatments, clinicId, addedToPricing]);
+
+  // Auto-add vaccinations to pricing when vaccination type is selected
+  const visitType = watch('visit_type');
+  const vaccinationType = watch('vaccination_type');
+  useEffect(() => {
+    if (visitType?.includes('vaccination') && vaccinationType && vaccinationType.trim()) {
+      const key = `vaccination-${vaccinationType}`;
+      if (!addedToPricing.has(key)) {
+        findPriceItem(vaccinationType.trim(), 'חיסונים').then(priceItemId => {
+          if (priceItemId) {
+            // Check if already in price_items to avoid duplicates
+            const currentPriceItems = watch('price_items') || [];
+            const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+            if (!exists) {
+              appendPriceItem({ item_id: priceItemId, quantity: 1 });
+            }
+            setAddedToPricing(prev => new Set(prev).add(key));
+          }
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitType, vaccinationType]);
+
   const { fields: priceItemsFields, append: appendPriceItem, remove: removePriceItem } = useFieldArray({
     control,
     name: 'price_items',
@@ -287,6 +495,22 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       setSelectedClientId(preSelectedClientId);
     }
   }, [preSelectedClientId]);
+
+  // Restore draft data if available
+  useEffect(() => {
+    if (draftDataToRestore && !visit) {
+      Object.entries(draftDataToRestore).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          setValue(key as keyof VisitFormData, value as any);
+          
+          // Also update selectedClientId if client_id is being restored
+          if (key === 'client_id' && typeof value === 'string') {
+            setSelectedClientId(value);
+          }
+        }
+      });
+    }
+  }, [draftDataToRestore, visit, setValue]);
 
   // Load existing visit data when editing
   useEffect(() => {
@@ -382,6 +606,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     if (data) setPriceItems(data);
   };
 
+
   // Handle creating new price item
   const handleCreatePriceItem = async () => {
     if (!clinicId || !newPriceItem.name || !newPriceItem.price_with_vat) {
@@ -406,7 +631,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           clinic_id: clinicId,
           name: newPriceItem.name,
           category: newPriceItem.category || 'כללי',
-          price_before_vat: priceBeforeVat,
+          price_without_vat: priceBeforeVat,
           price_with_vat: priceWithVat,
         })
         .select()
@@ -519,74 +744,119 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            {/* Stepper Navigation - Blue/Indigo theme to distinguish from orange pet tabs */}
-            <div className="flex items-center justify-between bg-gradient-to-l from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-2 mb-4" dir="rtl">
-              {VISIT_STEPS.map((step, index) => (
-                <div key={step.value} className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab(step.value)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                      activeTab === step.value
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'text-blue-700 hover:bg-blue-100'
-                    }`}
-                  >
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold ${
-                      activeTab === step.value
-                        ? 'bg-white/30'
-                        : 'bg-blue-200'
-                    }`}>
-                      {index + 1}
-                    </span>
-                    <span className="font-medium">{step.label}</span>
-                  </button>
-                  {index < VISIT_STEPS.length - 1 && (
-                    <ChevronLeft className="h-5 w-5 text-blue-300 mx-1" />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Basic Info */}
-            <TabsContent value="basic" className="space-y-4 mt-4">
+      <CardContent className="max-h-[calc(90vh-120px)] overflow-y-auto">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Section 1: פרטים בסיסיים */}
+          <div className="space-y-4 pb-4 border-b">
+            <h3 className="text-lg font-semibold text-right">פרטים בסיסיים</h3>
+            
+            {/* בחירת לקוח וחיית מחמד - רק אם לא pre-selected */}
+            {!preSelectedClientId && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>סוג ביקור *</Label>
-                  <TagInput
-                    category="visit_type"
-                    value={watch('visit_type')?.split(',').filter(Boolean) || []}
-                    onChange={(values) => {
-                      const valueStr = Array.isArray(values) ? values.join(',') : values;
-                      setValue('visit_type', valueStr, { shouldValidate: true });
-                      // נקה את סוג החיסון אם אין חיסון ברשימה
-                      const valuesArr = Array.isArray(values) ? values : [values];
-                      if (!valuesArr.includes('vaccination')) {
-                        setValue('vaccination_type', '');
-                      }
+                  <Label>לקוח *</Label>
+                  <Select
+                    value={watch('client_id') || ''}
+                    onValueChange={(value) => {
+                      setValue('client_id', value, { shouldValidate: true });
+                      setSelectedClientId(value);
+                      setValue('pet_id', '');
                     }}
-                    placeholder="בחר סוג ביקור"
-                    multiple={true}
-                  />
-                  {errors.visit_type && (
-                    <p className="text-sm text-destructive">{errors.visit_type.message}</p>
+                  >
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="בחר לקוח" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.first_name} {client.last_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.client_id && (
+                    <p className="text-sm text-destructive">{errors.client_id.message}</p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label>תאריך ושעה *</Label>
-                  <Input type="datetime-local" {...register('visit_date')} />
-                  {errors.visit_date && (
-                    <p className="text-sm text-destructive">{errors.visit_date.message}</p>
+                  <Label>חיית מחמד *</Label>
+                  <Select
+                    value={watch('pet_id') || ''}
+                    onValueChange={(value) => setValue('pet_id', value, { shouldValidate: true })}
+                    disabled={!selectedClientId}
+                  >
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="בחר חיית מחמד" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pets.map((pet) => (
+                        <SelectItem key={pet.id} value={pet.id}>
+                          {pet.name} ({pet.species})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.pet_id && (
+                    <p className="text-sm text-destructive">{errors.pet_id.message}</p>
                   )}
                 </div>
               </div>
+            )}
 
-              {/* בחירת סוג חיסון - מופיע רק כשסוג הביקור כולל חיסון */}
-              {watch('visit_type')?.includes('vaccination') && (
+            {/* אם יש pre-selected, רק להציג את המידע */}
+            {preSelectedClientId && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>לקוח</Label>
+                  <div className="p-2 bg-muted/50 rounded-md text-right">
+                    {clients.find(c => c.id === preSelectedClientId)?.first_name} {clients.find(c => c.id === preSelectedClientId)?.last_name}
+                  </div>
+                </div>
+                {preSelectedPetId && (
+                  <div className="space-y-2">
+                    <Label>חיית מחמד</Label>
+                    <div className="p-2 bg-muted/50 rounded-md text-right">
+                      {pets.find(p => p.id === preSelectedPetId)?.name} ({pets.find(p => p.id === preSelectedPetId)?.species})
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>סוג ביקור *</Label>
+                <TagInput
+                  category="visit_type"
+                  value={watch('visit_type')?.split(',').filter(Boolean) || []}
+                  onChange={(values) => {
+                    const valueStr = Array.isArray(values) ? values.join(',') : values;
+                    setValue('visit_type', valueStr, { shouldValidate: true });
+                    // נקה את סוג החיסון אם אין חיסון ברשימה
+                    const valuesArr = Array.isArray(values) ? values : [values];
+                    if (!valuesArr.includes('vaccination')) {
+                      setValue('vaccination_type', '');
+                    }
+                  }}
+                  placeholder="בחר סוג ביקור"
+                  multiple={true}
+                />
+                {errors.visit_type && (
+                  <p className="text-sm text-destructive">{errors.visit_type.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>תאריך ושעה *</Label>
+                <Input type="datetime-local" {...register('visit_date')} />
+                {errors.visit_date && (
+                  <p className="text-sm text-destructive">{errors.visit_date.message}</p>
+                )}
+              </div>
+            </div>
+
+            {/* בחירת סוג חיסון - מופיע רק כשסוג הביקור כולל חיסון */}
+            {watch('visit_type')?.includes('vaccination') && (
                 <div className="space-y-4 bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -643,11 +913,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   })()}
                 </div>
               )}
+          </div>
 
-            </TabsContent>
-
-            {/* Exam Tab - All examination data */}
-            <TabsContent value="exam" className="space-y-4 mt-4">
+          {/* Section 2: בדיקה */}
+          <div className="space-y-4 pb-4 border-b">
+            <h3 className="text-lg font-semibold text-right">בדיקה</h3>
               {/* תלונה עיקרית - תגיות */}
               <div className="space-y-2">
                 <Label>תלונה עיקרית</Label>
@@ -720,10 +990,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   placeholder="צילומים, בדיקות דם, שתן, אולטרסאונד..."
                 />
               </div>
-            </TabsContent>
+          </div>
 
-            {/* Diagnosis */}
-            <TabsContent value="diagnosis" className="space-y-4 mt-4">
+          {/* Section 3: אבחנה */}
+          <div className="space-y-4 pb-4 border-b">
+            <h3 className="text-lg font-semibold text-right">אבחנה</h3>
               <div className="flex justify-between items-center">
                 <Label>אבחנות</Label>
                 <Button type="button" size="sm" onClick={() => appendDiagnosis({ diagnosis: '', notes: '' })}>
@@ -748,10 +1019,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   </div>
                 </div>
               ))}
-            </TabsContent>
+          </div>
 
-            {/* Treatment */}
-            <TabsContent value="treatment" className="space-y-4 mt-4">
+          {/* Section 4: טיפול */}
+          <div className="space-y-4 pb-4 border-b">
+            <h3 className="text-lg font-semibold text-right">טיפול</h3>
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <Label>טיפולים</Label>
@@ -760,23 +1032,127 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                     הוסף טיפול
                   </Button>
                 </div>
-                {treatmentsFields.map((field, index) => (
-                  <div key={field.id} className="flex gap-2 items-start mb-2">
-                    <Button type="button" variant="ghost" size="icon" onClick={() => removeTreatment(index)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                    <div className="flex-1 space-y-2">
-                      <TagInput
-                        category="treatment"
-                        value={watch(`treatments.${index}.treatment`) || ''}
-                        onChange={(value) => setValue(`treatments.${index}.treatment`, value as string)}
-                        placeholder="בחר או הקלד טיפול"
-                        allowCreate={true}
-                      />
-                      <Input {...register(`treatments.${index}.notes`)} className="text-right" placeholder="הערות" />
+                {treatmentsFields.map((field, index) => {
+                  const treatmentName = watch(`treatments.${index}.treatment`) || '';
+                  const key = treatmentName ? `treatment-${index}-${treatmentName}` : `treatment-${index}-empty`;
+                  const needsPrice = itemsNeedingPrice.has(key);
+                  const priceData = newItemPrices.get(key) || { price_with_vat: '', price_without_vat: '' };
+                  
+                  return (
+                    <div key={field.id} className="flex gap-2 items-start mb-2">
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeTreatment(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <div className="flex-1 space-y-2">
+                        <TagInput
+                          category="treatment"
+                          value={treatmentName}
+                          onChange={(value) => setValue(`treatments.${index}.treatment`, value as string)}
+                          placeholder="בחר או הקלד טיפול"
+                          allowCreate={true}
+                        />
+                        <Input {...register(`treatments.${index}.notes`)} className="text-right" placeholder="הערות" />
+                        {needsPrice && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2 space-y-2">
+                            <Label className="text-xs text-yellow-800">הפריט לא נמצא במחירון - הזן מחיר:</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs">מחיר ללא מע״מ</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={priceData.price_without_vat}
+                                  onChange={(e) => {
+                                    const withoutVat = e.target.value;
+                                    const withVat = withoutVat ? (parseFloat(withoutVat) * 1.17).toFixed(2) : '';
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                      return newMap;
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="text-right text-sm"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">מחיר כולל מע״מ</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={priceData.price_with_vat}
+                                  onChange={(e) => {
+                                    const withVat = e.target.value;
+                                    const withoutVat = withVat ? (parseFloat(withVat) / 1.17).toFixed(2) : '';
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                      return newMap;
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="text-right text-sm"
+                                />
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="default"
+                              className="w-full"
+                              disabled={!priceData.price_with_vat || parseFloat(priceData.price_with_vat) <= 0}
+                              onClick={async () => {
+                                const priceWithVat = parseFloat(priceData.price_with_vat);
+                                const priceWithoutVat = parseFloat(priceData.price_without_vat);
+                                if (priceWithVat > 0 && treatmentName) {
+                                  // Save current scroll position
+                                  const scrollContainer = document.querySelector('.max-h-\\[calc\\(90vh-120px\\)\\]') || window;
+                                  const scrollY = scrollContainer === window ? window.scrollY : (scrollContainer as Element).scrollTop;
+                                  
+                                  const priceItemId = await createAndAddPriceItem(treatmentName, 'טיפולים', priceWithVat, priceWithoutVat);
+                                  if (priceItemId) {
+                                    const currentPriceItems = watch('price_items') || [];
+                                    const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+                                    if (!exists) {
+                                      appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                    }
+                                    setAddedToPricing(prev => new Set(prev).add(key));
+                                    setItemsNeedingPrice(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(key);
+                                      return newMap;
+                                    });
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(key);
+                                      return newMap;
+                                    });
+                                    
+                                    // Restore scroll position after state updates
+                                    requestAnimationFrame(() => {
+                                      if (scrollContainer === window) {
+                                        window.scrollTo(0, scrollY);
+                                      } else {
+                                        (scrollContainer as Element).scrollTop = scrollY;
+                                      }
+                                    });
+                                    
+                                    toast({
+                                      title: 'הצלחה',
+                                      description: 'הפריט נוסף לתמחור',
+                                    });
+                                  }
+                                }
+                              }}
+                            >
+                              הוסף לתמחור
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div>
@@ -787,24 +1163,130 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                     הוסף תרופה
                   </Button>
                 </div>
-                {medicationsFields.map((field, index) => (
-                  <div key={field.id} className="flex gap-2 items-start mb-2">
-                    <Button type="button" variant="ghost" size="icon" onClick={() => removeMedication(index)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                    <div className="flex-1 grid grid-cols-3 gap-2">
-                      <TagInput
-                        category="medication"
-                        value={watch(`medications.${index}.medication`) || ''}
-                        onChange={(value) => setValue(`medications.${index}.medication`, value as string)}
-                        placeholder="בחר או הקלד תרופה"
-                        allowCreate={true}
-                      />
-                      <Input {...register(`medications.${index}.dosage`)} className="text-right" placeholder="מינון" />
-                      <Input {...register(`medications.${index}.frequency`)} className="text-right" placeholder="תדירות" />
+                {medicationsFields.map((field, index) => {
+                  const medicationName = watch(`medications.${index}.medication`) || '';
+                  const key = medicationName ? `medication-${index}-${medicationName}` : `medication-${index}-empty`;
+                  const needsPrice = itemsNeedingPrice.has(key);
+                  const priceData = newItemPrices.get(key) || { price_with_vat: '', price_without_vat: '' };
+                  
+                  return (
+                    <div key={field.id} className="flex gap-2 items-start mb-2">
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeMedication(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <div className="flex-1 space-y-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          <TagInput
+                            category="medication"
+                            value={medicationName}
+                            onChange={(value) => setValue(`medications.${index}.medication`, value as string)}
+                            placeholder="בחר או הקלד תרופה"
+                            allowCreate={true}
+                          />
+                          <Input {...register(`medications.${index}.dosage`)} className="text-right" placeholder="מינון" />
+                          <Input {...register(`medications.${index}.frequency`)} className="text-right" placeholder="תדירות" />
+                        </div>
+                        {needsPrice && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2 space-y-2">
+                            <Label className="text-xs text-yellow-800">הפריט לא נמצא במחירון - הזן מחיר:</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs">מחיר ללא מע״מ</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={priceData.price_without_vat}
+                                  onChange={(e) => {
+                                    const withoutVat = e.target.value;
+                                    const withVat = withoutVat ? (parseFloat(withoutVat) * 1.17).toFixed(2) : '';
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                      return newMap;
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="text-right text-sm"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">מחיר כולל מע״מ</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={priceData.price_with_vat}
+                                  onChange={(e) => {
+                                    const withVat = e.target.value;
+                                    const withoutVat = withVat ? (parseFloat(withVat) / 1.17).toFixed(2) : '';
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                      return newMap;
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="text-right text-sm"
+                                />
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="default"
+                              className="w-full"
+                              disabled={!priceData.price_with_vat || parseFloat(priceData.price_with_vat) <= 0}
+                              onClick={async (e) => {
+                                const priceWithVat = parseFloat(priceData.price_with_vat);
+                                const priceWithoutVat = parseFloat(priceData.price_without_vat);
+                                if (priceWithVat > 0 && medicationName) {
+                                  // Save current scroll position from the scrollable container
+                                  const scrollContainer = (e.currentTarget as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
+                                  const scrollY = scrollContainer?.scrollTop ?? window.scrollY;
+                                  
+                                  const priceItemId = await createAndAddPriceItem(medicationName, 'תרופות', priceWithVat, priceWithoutVat);
+                                  if (priceItemId) {
+                                    const currentPriceItems = watch('price_items') || [];
+                                    const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+                                    if (!exists) {
+                                      appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                    }
+                                    setAddedToPricing(prev => new Set(prev).add(key));
+                                    setItemsNeedingPrice(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(key);
+                                      return newMap;
+                                    });
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(key);
+                                      return newMap;
+                                    });
+                                    
+                                    // Restore scroll position after state updates
+                                    setTimeout(() => {
+                                      if (scrollContainer) {
+                                        scrollContainer.scrollTop = scrollY;
+                                      } else {
+                                        window.scrollTo(0, scrollY);
+                                      }
+                                    }, 0);
+                                    
+                                    toast({
+                                      title: 'הצלחה',
+                                      description: 'הפריט נוסף לתמחור',
+                                    });
+                                  }
+                                }
+                              }}
+                            >
+                              הוסף לתמחור
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="space-y-2">
@@ -828,10 +1310,87 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   placeholder="סיכום בשפה פשוטה ללקוח..."
                 />
               </div>
-            </TabsContent>
+          </div>
 
-            {/* Billing */}
-            <TabsContent value="billing" className="space-y-4 mt-4">
+          {/* Section 5: פולואו אפ */}
+          <div className="space-y-4 pb-4 border-b">
+            <h3 className="text-lg font-semibold text-right">פולואו אפ</h3>
+            <div className="bg-muted/50 p-4 rounded-lg mb-4" dir="rtl">
+              <p className="text-sm text-muted-foreground">
+                הוסף תזכורות לפולואו אפ שיופיעו ביומן ובדף התזכורות
+              </p>
+            </div>
+            
+            <div className="flex justify-between items-center">
+              <Label>תזכורות פולואו אפ</Label>
+              <Button 
+                type="button" 
+                size="sm" 
+                onClick={() => appendFollowUp({ 
+                  due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), 
+                  notes: '', 
+                  reminder_type: 'follow_up' 
+                })}
+              >
+                <Plus className="h-4 w-4 ml-2" />
+                הוסף תזכורת
+              </Button>
+            </div>
+            
+            {followUpsFields.map((field, index) => (
+              <div key={field.id} className="border rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <Label>תזכורת #{index + 1}</Label>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeFollowUp(index)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>תאריך</Label>
+                    <Input 
+                      type="date" 
+                      {...register(`follow_ups.${index}.due_date`)} 
+                      className="text-right" 
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>סוג תזכורת</Label>
+                    <TagInput
+                      category="reminder_type"
+                      value={watch(`follow_ups.${index}.reminder_type`) || 'follow_up'}
+                      onChange={(value) => setValue(`follow_ups.${index}.reminder_type`, value as string)}
+                      placeholder="בחר סוג תזכורת"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>הערות</Label>
+                  <AITextarea
+                    value={watch(`follow_ups.${index}.notes`) || ''}
+                    onValueChange={(value) => setValue(`follow_ups.${index}.notes`, value)}
+                    aiContext="general"
+                    className="text-right"
+                    placeholder="למה צריך לעשות פולואו אפ..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+            ))}
+            
+            {followUpsFields.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                לא הוגדרו תזכורות פולואו אפ
+              </div>
+            )}
+          </div>
+
+          {/* Section 6: חיוב */}
+          <div className="space-y-4 pb-4 border-b">
+            <h3 className="text-lg font-semibold text-right">חיוב</h3>
               <div className="flex justify-between items-center">
                 <Label>פריטי חיוב</Label>
                 <div className="flex gap-2">
@@ -908,85 +1467,10 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                   </div>
                 </div>
               )}
-            </TabsContent>
+          </div>
 
-            {/* Follow-up */}
-            <TabsContent value="followup" className="space-y-4 mt-4">
-              <div className="bg-muted/50 p-4 rounded-lg mb-4" dir="rtl">
-                <p className="text-sm text-muted-foreground">
-                  הוסף תזכורות לפולואו אפ שיופיעו ביומן ובדף התזכורות
-                </p>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <Label>תזכורות פולואו אפ</Label>
-                <Button 
-                  type="button" 
-                  size="sm" 
-                  onClick={() => appendFollowUp({ 
-                    due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), 
-                    notes: '', 
-                    reminder_type: 'follow_up' 
-                  })}
-                >
-                  <Plus className="h-4 w-4 ml-2" />
-                  הוסף תזכורת
-                </Button>
-              </div>
-              
-              {followUpsFields.map((field, index) => (
-                <div key={field.id} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <Label>תזכורת #{index + 1}</Label>
-                    <Button type="button" variant="ghost" size="icon" onClick={() => removeFollowUp(index)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>תאריך</Label>
-                      <Input 
-                        type="date" 
-                        {...register(`follow_ups.${index}.due_date`)} 
-                        className="text-right" 
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>סוג תזכורת</Label>
-                      <TagInput
-                        category="reminder_type"
-                        value={watch(`follow_ups.${index}.reminder_type`) || 'follow_up'}
-                        onChange={(value) => setValue(`follow_ups.${index}.reminder_type`, value as string)}
-                        placeholder="בחר סוג תזכורת"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>הערות</Label>
-                    <AITextarea
-                      value={watch(`follow_ups.${index}.notes`) || ''}
-                      onValueChange={(value) => setValue(`follow_ups.${index}.notes`, value)}
-                      aiContext="general"
-                      className="text-right"
-                      placeholder="למה צריך לעשות פולואו אפ..."
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              ))}
-              
-              {followUpsFields.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  לא הוגדרו תזכורות פולואו אפ
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-
-          <div className="flex gap-3 justify-start pt-4 mt-4 border-t">
+          {/* Actions */}
+          <div className="flex gap-3 justify-start pt-4">
             <Button type="submit">
               {visit ? 'עדכן' : 'הוסף ביקור'}
             </Button>
@@ -1107,6 +1591,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
     </Card>
   );
 };

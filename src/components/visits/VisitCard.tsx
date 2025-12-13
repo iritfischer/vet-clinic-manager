@@ -6,6 +6,7 @@ import { Tables } from '@/integrations/supabase/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -20,6 +21,7 @@ import { he } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { useVisitAutoSave } from '@/hooks/useVisitAutoSave';
+import { useToast } from '@/hooks/use-toast';
 
 type Visit = Tables<'visits'> & {
   clients?: Tables<'clients'> | null;
@@ -81,11 +83,17 @@ const statusConfig = {
 export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: propVisitId, clinicId: propClinicId, draftDataToRestore, onFormChange }: VisitCardProps) => {
   const { clinicId: hookClinicId } = useClinic();
   const clinicId = propClinicId || hookClinicId;
+  const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(visit?.client_id || '');
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+
+  // Track items that need price input (not found in pricing)
+  const [itemsNeedingPrice, setItemsNeedingPrice] = useState<Map<string, { type: 'medication' | 'treatment'; index: number; name: string; category: string }>>(new Map());
+  // Track price inputs for new items
+  const [newItemPrices, setNewItemPrices] = useState<Map<string, { price_with_vat: string; price_without_vat: string }>>(new Map());
 
   const formMethods = useForm<VisitFormData>({
     resolver: zodResolver(visitSchema),
@@ -225,6 +233,161 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: pro
     if (data) setPriceItems(data);
   };
 
+  // Helper function to find price item (without creating)
+  const findPriceItem = async (name: string, category: string): Promise<string | null> => {
+    if (!clinicId || !name) return null;
+
+    const { data: existingItems } = await supabase
+      .from('price_items')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('name', name)
+      .eq('category', category)
+      .limit(1);
+
+    if (existingItems && existingItems.length > 0) {
+      return existingItems[0].id;
+    }
+    return null;
+  };
+
+  // Helper function to create price item and add to pricing
+  const createAndAddPriceItem = async (name: string, category: string, priceWithVat: number, priceWithoutVat: number): Promise<string | null> => {
+    if (!clinicId) return null;
+
+    try {
+      const { data: newItem, error } = await supabase
+        .from('price_items')
+        .insert({
+          clinic_id: clinicId,
+          name: name,
+          category: category,
+          price_without_vat: priceWithoutVat,
+          price_with_vat: priceWithVat,
+          is_discountable: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Refresh price items list
+      await fetchPriceItems();
+
+      return newItem.id;
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message || 'שגיאה ביצירת פריט החיוב',
+        variant: 'destructive',
+      });
+      return null;
+    }
+  };
+
+  // Track which items have already been added to pricing to avoid duplicates
+  const [addedToPricing, setAddedToPricing] = useState<Set<string>>(new Set());
+  const medications = watch('medications') || [];
+  const treatments = watch('treatments') || [];
+
+  // Auto-add medications to pricing when medication name is entered
+  useEffect(() => {
+    if (mode !== 'edit') return;
+    medications.forEach(async (med, index) => {
+      if (med.medication && med.medication.trim()) {
+        const key = `medication-${index}-${med.medication}`;
+        if (!addedToPricing.has(key)) {
+          const priceItemId = await findPriceItem(med.medication.trim(), 'תרופות');
+          if (priceItemId) {
+            // Item exists - add automatically
+            const currentPriceItems = watch('price_items') || [];
+            const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+            if (!exists) {
+              appendPriceItem({ item_id: priceItemId, quantity: 1 });
+            }
+            setAddedToPricing(prev => new Set(prev).add(key));
+            // Remove from items needing price if it was there
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(key);
+              return newMap;
+            });
+          } else {
+            // Item doesn't exist - mark as needing price input
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { type: 'medication', index, name: med.medication.trim(), category: 'תרופות' });
+              return newMap;
+            });
+          }
+        }
+      } else {
+        // Medication name cleared - remove from tracking
+        const key = `medication-${index}-${med.medication || ''}`;
+        setItemsNeedingPrice(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(key);
+          return newMap;
+        });
+        setAddedToPricing(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(key);
+          return newSet;
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [medications, mode]);
+
+  // Auto-add treatments to pricing when treatment name is entered
+  useEffect(() => {
+    if (mode !== 'edit') return;
+    treatments.forEach(async (treatment, index) => {
+      if (treatment.treatment && treatment.treatment.trim()) {
+        const key = `treatment-${index}-${treatment.treatment}`;
+        if (!addedToPricing.has(key)) {
+          const priceItemId = await findPriceItem(treatment.treatment.trim(), 'טיפולים');
+          if (priceItemId) {
+            // Item exists - add automatically
+            const currentPriceItems = watch('price_items') || [];
+            const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+            if (!exists) {
+              appendPriceItem({ item_id: priceItemId, quantity: 1 });
+            }
+            setAddedToPricing(prev => new Set(prev).add(key));
+            // Remove from items needing price if it was there
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(key);
+              return newMap;
+            });
+          } else {
+            // Item doesn't exist - mark as needing price input
+            setItemsNeedingPrice(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { type: 'treatment', index, name: treatment.treatment.trim(), category: 'טיפולים' });
+              return newMap;
+            });
+          }
+        }
+      } else {
+        // Treatment name cleared - remove from tracking
+        const key = `treatment-${index}-${treatment.treatment || ''}`;
+        setItemsNeedingPrice(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(key);
+          return newMap;
+        });
+        setAddedToPricing(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(key);
+          return newSet;
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treatments, mode]);
+
   const onSubmit = (data: VisitFormData) => {
     const cleanedData = {
       client_id: data.client_id,
@@ -251,7 +414,8 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: pro
   // View Mode
   if (mode === 'view' && visit) {
     return (
-      <div className="space-y-6 text-right" dir="rtl">
+      <>
+        <div className="space-y-6 text-right" dir="rtl">
         {/* Header Info */}
         <div className="flex items-center gap-4 flex-wrap pb-4 border-b">
           <div className="text-sm text-muted-foreground">
@@ -375,14 +539,16 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: pro
           </div>
         )}
       </div>
+      </>
     );
   }
 
   // Edit Mode - Same structure as View Mode but with form inputs
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" dir="rtl">
-      {/* Header Info - Same layout as view mode */}
-      <div className="flex items-center gap-4 flex-wrap pb-4 border-b justify-end">
+    <>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" dir="rtl">
+        {/* Header Info - Same layout as view mode */}
+        <div className="flex items-center gap-4 flex-wrap pb-4 border-b justify-end">
         <div className="text-sm">
           <span className="font-medium">תאריך:</span>{' '}
           <Input
@@ -561,29 +727,128 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: pro
               </Button>
             </div>
             <div className="space-y-2">
-              {treatmentsFields.map((field, index) => (
-                <div key={field.id} className="text-sm bg-accent/50 rounded p-2 relative">
-                  <Input
-                    {...register(`treatments.${index}.treatment`)}
-                    className="font-medium mb-1 h-7 text-sm text-right"
-                    placeholder="טיפול"
-                  />
-                  <Input
-                    {...register(`treatments.${index}.notes`)}
-                    className="text-muted-foreground text-xs h-6 text-right"
-                    placeholder="הערות"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-1 left-1 h-5 w-5"
-                    onClick={() => removeTreatment(index)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
+              {treatmentsFields.map((field, index) => {
+                const treatmentName = watch(`treatments.${index}.treatment`) || '';
+                const key = `treatment-${index}-${treatmentName}`;
+                const needsPrice = itemsNeedingPrice.has(key);
+                const priceData = newItemPrices.get(key) || { price_with_vat: '', price_without_vat: '' };
+                
+                return (
+                  <div key={field.id} className="text-sm bg-accent/50 rounded p-2 relative space-y-2">
+                    <Input
+                      {...register(`treatments.${index}.treatment`)}
+                      className="font-medium h-7 text-sm text-right"
+                      placeholder="טיפול"
+                    />
+                    <Input
+                      {...register(`treatments.${index}.notes`)}
+                      className="text-muted-foreground text-xs h-6 text-right"
+                      placeholder="הערות"
+                    />
+                    {needsPrice && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2 space-y-2 mt-2">
+                        <Label className="text-xs text-yellow-800">הפריט לא נמצא במחירון - הזן מחיר:</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">מחיר ללא מע״מ</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={priceData.price_without_vat}
+                              onChange={(e) => {
+                                const withoutVat = e.target.value;
+                                const withVat = withoutVat ? (parseFloat(withoutVat) * 1.17).toFixed(2) : '';
+                                setNewItemPrices(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                  return newMap;
+                                });
+                              }}
+                              placeholder="0.00"
+                              className="text-right text-xs h-6"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">מחיר כולל מע״מ</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={priceData.price_with_vat}
+                              onChange={(e) => {
+                                const withVat = e.target.value;
+                                const withoutVat = withVat ? (parseFloat(withVat) / 1.17).toFixed(2) : '';
+                                setNewItemPrices(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                  return newMap;
+                                });
+                              }}
+                              placeholder="0.00"
+                              className="text-right text-xs h-6"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          className="w-full h-6 text-xs"
+                          disabled={!priceData.price_with_vat || parseFloat(priceData.price_with_vat) <= 0}
+                          onClick={async () => {
+                            const priceWithVat = parseFloat(priceData.price_with_vat);
+                            const priceWithoutVat = parseFloat(priceData.price_without_vat);
+                            if (priceWithVat > 0 && treatmentName) {
+                              // Save current scroll position
+                              const scrollY = window.scrollY;
+                              
+                              const priceItemId = await createAndAddPriceItem(treatmentName, 'טיפולים', priceWithVat, priceWithoutVat);
+                              if (priceItemId) {
+                                const currentPriceItems = watch('price_items') || [];
+                                const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+                                if (!exists) {
+                                  appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                }
+                                setAddedToPricing(prev => new Set(prev).add(key));
+                                setItemsNeedingPrice(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.delete(key);
+                                  return newMap;
+                                });
+                                setNewItemPrices(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.delete(key);
+                                  return newMap;
+                                });
+                                
+                                // Restore scroll position after state updates
+                                setTimeout(() => {
+                                  window.scrollTo(0, scrollY);
+                                }, 0);
+                                
+                                toast({
+                                  title: 'הצלחה',
+                                  description: 'הפריט נוסף לתמחור',
+                                });
+                              }
+                            }
+                          }}
+                        >
+                          הוסף לתמחור
+                        </Button>
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-1 left-1 h-5 w-5"
+                      onClick={() => removeTreatment(index)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -603,42 +868,141 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: pro
               </Button>
             </div>
             <div className="space-y-2">
-              {medicationsFields.map((field, index) => (
-                <div key={field.id} className="text-sm bg-accent/50 rounded p-2 relative">
-                  <Input
-                    {...register(`medications.${index}.medication`)}
-                    className="font-medium mb-1 h-7 text-sm text-right"
-                    placeholder="תרופה"
-                  />
-                  <div className="text-muted-foreground text-xs space-y-1">
-                    <div className="flex gap-2">
-                      <span>מינון:</span>
-                      <Input
-                        {...register(`medications.${index}.dosage`)}
-                        className="h-5 text-xs flex-1 text-right"
-                        placeholder="מינון"
-                      />
+              {medicationsFields.map((field, index) => {
+                const medicationName = watch(`medications.${index}.medication`) || '';
+                const key = `medication-${index}-${medicationName}`;
+                const needsPrice = itemsNeedingPrice.has(key);
+                const priceData = newItemPrices.get(key) || { price_with_vat: '', price_without_vat: '' };
+                
+                return (
+                  <div key={field.id} className="text-sm bg-accent/50 rounded p-2 relative space-y-2">
+                    <Input
+                      {...register(`medications.${index}.medication`)}
+                      className="font-medium h-7 text-sm text-right"
+                      placeholder="תרופה"
+                    />
+                    <div className="text-muted-foreground text-xs space-y-1">
+                      <div className="flex gap-2">
+                        <span>מינון:</span>
+                        <Input
+                          {...register(`medications.${index}.dosage`)}
+                          className="h-5 text-xs flex-1 text-right"
+                          placeholder="מינון"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <span>תדירות:</span>
+                        <Input
+                          {...register(`medications.${index}.frequency`)}
+                          className="h-5 text-xs flex-1 text-right"
+                          placeholder="תדירות"
+                        />
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <span>תדירות:</span>
-                      <Input
-                        {...register(`medications.${index}.frequency`)}
-                        className="h-5 text-xs flex-1 text-right"
-                        placeholder="תדירות"
-                      />
-                    </div>
+                    {needsPrice && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2 space-y-2 mt-2">
+                        <Label className="text-xs text-yellow-800">הפריט לא נמצא במחירון - הזן מחיר:</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">מחיר ללא מע״מ</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={priceData.price_without_vat}
+                              onChange={(e) => {
+                                const withoutVat = e.target.value;
+                                const withVat = withoutVat ? (parseFloat(withoutVat) * 1.17).toFixed(2) : '';
+                                setNewItemPrices(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                  return newMap;
+                                });
+                              }}
+                              placeholder="0.00"
+                              className="text-right text-xs h-6"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">מחיר כולל מע״מ</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={priceData.price_with_vat}
+                              onChange={(e) => {
+                                const withVat = e.target.value;
+                                const withoutVat = withVat ? (parseFloat(withVat) / 1.17).toFixed(2) : '';
+                                setNewItemPrices(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                  return newMap;
+                                });
+                              }}
+                              placeholder="0.00"
+                              className="text-right text-xs h-6"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          className="w-full h-6 text-xs"
+                          disabled={!priceData.price_with_vat || parseFloat(priceData.price_with_vat) <= 0}
+                          onClick={async () => {
+                            const priceWithVat = parseFloat(priceData.price_with_vat);
+                            const priceWithoutVat = parseFloat(priceData.price_without_vat);
+                            if (priceWithVat > 0 && medicationName) {
+                              // Save current scroll position
+                              const scrollY = window.scrollY;
+                              
+                              const priceItemId = await createAndAddPriceItem(medicationName, 'תרופות', priceWithVat, priceWithoutVat);
+                              if (priceItemId) {
+                                const currentPriceItems = watch('price_items') || [];
+                                const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+                                if (!exists) {
+                                  appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                }
+                                setAddedToPricing(prev => new Set(prev).add(key));
+                                setItemsNeedingPrice(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.delete(key);
+                                  return newMap;
+                                });
+                                setNewItemPrices(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.delete(key);
+                                  return newMap;
+                                });
+                                
+                                // Restore scroll position after state updates
+                                setTimeout(() => {
+                                  window.scrollTo(0, scrollY);
+                                }, 0);
+                                
+                                toast({
+                                  title: 'הצלחה',
+                                  description: 'הפריט נוסף לתמחור',
+                                });
+                              }
+                            }
+                          }}
+                        >
+                          הוסף לתמחור
+                        </Button>
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-1 left-1 h-5 w-5"
+                      onClick={() => removeMedication(index)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-1 left-1 h-5 w-5"
-                    onClick={() => removeMedication(index)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -727,5 +1091,6 @@ export const VisitCard = ({ visit, mode = 'view', onSave, onCancel, visitId: pro
         )}
       </div>
     </form>
+    </>
   );
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Menu, X, Calendar, Search, User, PawPrint } from 'lucide-react';
+import { Settings, Menu, X, Calendar, Search, User, PawPrint, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NavLink, useNavigate } from 'react-router-dom';
@@ -249,11 +249,16 @@ export const Header = ({ isSidebarOpen, onToggleSidebar }: HeaderProps) => {
         )}
       </div>
 
-      {/* Left side - Calendar & Settings */}
+      {/* Left side - Calendar, New Visit & Settings */}
       <div className="flex items-center gap-2">
         <NavLink to="/appointments">
           <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" title="יומן תורים">
             <Calendar className="h-5 w-5" />
+          </Button>
+        </NavLink>
+        <NavLink to="/visits?new=true">
+          <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" title="ביקור חדש">
+            <FileText className="h-5 w-5" />
           </Button>
         </NavLink>
         <NavLink to="/settings">

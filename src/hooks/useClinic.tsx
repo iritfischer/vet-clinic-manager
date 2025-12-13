@@ -31,7 +31,6 @@ export const useClinic = () => {
       }
 
       setClinicId(profileData.clinic_id);
-
       if (profileData.clinics) {
         setClinic(profileData.clinics as Clinic);
       }
