@@ -18,7 +18,7 @@ import { he } from 'date-fns/locale';
 import { VisitSummaryPreview } from './VisitSummaryPreview';
 import { VisitSummaryEditor } from './VisitSummaryEditor';
 import { VisitSummaryData, VisitWithRelations, DiagnosisItem, TreatmentItem, MedicationItem, ChargeItem } from '@/lib/visitSummaryTypes';
-import { downloadVisitPdfFromElement, openWhatsAppWithPdfFromElement } from '@/lib/generateVisitPdf';
+import { downloadVisitPdfFromData, openWhatsAppWithPdfFromData } from '@/lib/generateVisitPdf';
 
 interface VisitSummaryDialogProps {
   open: boolean;
@@ -161,7 +161,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         clinicVetLicense: clinicSettings.vetLicense || undefined,
         clinicEmail: clinic.email || undefined,
         primaryColor: clinicSettings.primaryColor || '#E8833A',
-        visitDate: format(new Date(visit.visit_date), 'dd/MM/yyyy HH:mm', { locale: he }),
+        visitDate: format(new Date(visit.visit_date), 'dd/MM/yyyy', { locale: he }),
         visitType: visit.visit_type,
         petName: visit.pets?.name || 'לא ידוע',
         petSpecies: visit.pets?.species || 'other',
@@ -171,6 +171,10 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         petAge: calculateAge(visit.pets?.birth_date || null),
         ownerName,
         ownerPhone: visit.clients?.phone_primary || '',
+        generalHistory: visit.general_history || undefined,
+        medicalHistory: visit.medical_history || undefined,
+        currentHistory: visit.current_history || undefined,
+        physicalExam: visit.physical_exam || undefined,
         diagnoses,
         treatments,
         medications,
@@ -185,22 +189,12 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
   }, [visit, clinic]);
 
   const handleDownloadPdf = async () => {
-    if (!summaryData || !previewRef.current) return;
-
-    // Make sure we're on the preview tab to capture the element
-    setActiveTab('preview');
-
-    // Wait a bit for the tab to render
-    await new Promise(resolve => setTimeout(resolve, 100));
+    if (!summaryData) return;
 
     setLoading(true);
     try {
-      const element = previewRef.current;
-      if (!element) {
-        throw new Error('Preview element not found');
-      }
-      await downloadVisitPdfFromElement(
-        element,
+      await downloadVisitPdfFromData(
+        summaryData,
         `סיכום-ביקור-${summaryData.petName}-${summaryData.visitDate.replace(/[/:]/g, '-')}.pdf`
       );
       toast.success('ה-PDF הורד בהצלחה');
@@ -213,29 +207,18 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
   };
 
   const handleSendWhatsApp = async () => {
-    if (!summaryData || !previewRef.current) return;
+    if (!summaryData) return;
 
     if (!summaryData.ownerPhone) {
       toast.error('לא נמצא מספר טלפון ללקוח');
       return;
     }
 
-    // Make sure we're on the preview tab to capture the element
-    setActiveTab('preview');
-
-    // Wait a bit for the tab to render
-    await new Promise(resolve => setTimeout(resolve, 100));
-
     setSendingWhatsApp(true);
     try {
-      const element = previewRef.current;
-      if (!element) {
-        throw new Error('Preview element not found');
-      }
-      const result = await openWhatsAppWithPdfFromElement(
-        element,
-        summaryData.ownerPhone,
+      const result = await openWhatsAppWithPdfFromData(
         summaryData,
+        summaryData.ownerPhone,
         clinicId || undefined
       );
 

@@ -52,6 +52,12 @@ export interface VisitSummaryData {
   ownerName: string;
   ownerPhone: string;
 
+  // History & Physical Exam
+  generalHistory?: string;
+  medicalHistory?: string;
+  currentHistory?: string;
+  physicalExam?: string;
+
   // Medical details
   diagnoses: DiagnosisItem[];
   treatments: TreatmentItem[];

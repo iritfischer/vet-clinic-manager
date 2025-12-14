@@ -61,12 +61,58 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
   return (
     <div className="space-y-6 max-h-[60vh] overflow-y-auto pl-2" dir="rtl">
       {/* Pet Info - Read Only */}
-      <div className="bg-accent/30 rounded-lg p-3">
-        <h3 className="font-semibold mb-2">פרטי חיית המחמד</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm">
+      <div className="pb-3">
+        <h3 className="font-bold mb-2 border-b-2 border-gray-300 pb-2">פרטי חיית המחמד</h3>
+        <div className="grid grid-cols-2 gap-2 text-sm pt-2">
           <div>שם: <strong>{data.petName}</strong></div>
           <div>תאריך ביקור: <strong>{data.visitDate}</strong></div>
         </div>
+      </div>
+
+      <Separator />
+
+      {/* History */}
+      <div>
+        <Label className="text-base font-semibold mb-2 block">היסטוריה נוכחית</Label>
+        <Textarea
+          placeholder="תסמינים נוכחיים, מתי התחילו, שינויים אחרונים..."
+          value={data.currentHistory || ''}
+          onChange={(e) => updateField('currentHistory', e.target.value)}
+          rows={2}
+        />
+      </div>
+
+      <div>
+        <Label className="text-base font-semibold mb-2 block">היסטוריה רפואית</Label>
+        <Textarea
+          placeholder="מצבים קודמים, ניתוחים, אלרגיות..."
+          value={data.medicalHistory || ''}
+          onChange={(e) => updateField('medicalHistory', e.target.value)}
+          rows={2}
+        />
+      </div>
+
+      <div>
+        <Label className="text-base font-semibold mb-2 block">היסטוריה כללית</Label>
+        <Textarea
+          placeholder="מידע כללי על החיה..."
+          value={data.generalHistory || ''}
+          onChange={(e) => updateField('generalHistory', e.target.value)}
+          rows={2}
+        />
+      </div>
+
+      <Separator />
+
+      {/* Physical Exam */}
+      <div>
+        <Label className="text-base font-semibold mb-2 block">בדיקה פיזיקלית</Label>
+        <Textarea
+          placeholder="ממצאי הבדיקה הפיזיקלית..."
+          value={data.physicalExam || ''}
+          onChange={(e) => updateField('physicalExam', e.target.value)}
+          rows={3}
+        />
       </div>
 
       <Separator />
@@ -82,7 +128,7 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
         </div>
         <div className="space-y-3">
           {data.diagnoses.map((d, idx) => (
-            <div key={idx} className="flex gap-2 items-start bg-red-50/50 p-3 rounded-lg">
+            <div key={idx} className="flex gap-2 items-start border-b border-gray-200 pb-3">
               <div className="flex-1 space-y-2">
                 <Input
                   placeholder="אבחנה"
@@ -125,7 +171,7 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
         </div>
         <div className="space-y-3">
           {data.treatments.map((t, idx) => (
-            <div key={idx} className="flex gap-2 items-start bg-blue-50/50 p-3 rounded-lg">
+            <div key={idx} className="flex gap-2 items-start border-b border-gray-200 pb-3">
               <div className="flex-1 space-y-2">
                 <Input
                   placeholder="טיפול"
@@ -168,7 +214,7 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
         </div>
         <div className="space-y-3">
           {data.medications.map((m, idx) => (
-            <div key={idx} className="flex gap-2 items-start bg-green-50/50 p-3 rounded-lg">
+            <div key={idx} className="flex gap-2 items-start border-b border-gray-200 pb-3">
               <div className="flex-1 space-y-2">
                 <Input
                   placeholder="שם התרופה"

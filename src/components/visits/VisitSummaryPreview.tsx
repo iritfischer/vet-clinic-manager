@@ -1,6 +1,6 @@
 import { VisitSummaryData } from '@/lib/visitSummaryTypes';
 import { Separator } from '@/components/ui/separator';
-import { Calendar, Phone, MapPin, Pill, Stethoscope, Heart, FileText, Clock, Receipt, Globe } from 'lucide-react';
+import { Calendar, Phone, MapPin, Pill, Stethoscope, Heart, FileText, Clock, Receipt, Globe, ClipboardList, History } from 'lucide-react';
 
 interface VisitSummaryPreviewProps {
   data: VisitSummaryData;
@@ -85,33 +85,19 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
             </div>
           </div>
 
-          {/* Title */}
+          {/* Title with pet name and date */}
           <div className="text-center mt-6 mb-2">
             <h2
               className="text-2xl font-bold text-gray-800 border-b-2 pb-2 inline-block px-8"
               style={{ borderColor: primaryColor }}
             >
-              סיכום ביקור
+              סיכום ביקור - {data.petName} - {data.visitDate}
             </h2>
           </div>
         </div>
       </div>
 
       <div className="px-8 py-4 space-y-6 flex-1" data-pdf-content="true">
-        {/* Visit Date & Type */}
-        <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <Calendar className="h-6 w-6" style={{ color: primaryColor }} />
-            <span className="font-semibold text-xl">{data.visitDate}</span>
-          </div>
-          <span
-            className="text-white text-lg px-4 py-2 rounded-lg font-semibold text-center inline-block min-w-[80px]"
-            style={{ backgroundColor: primaryColor }}
-          >
-            {visitTypeLabels[data.visitType] || data.visitType}
-          </span>
-        </div>
-
         {/* Pet Info */}
         <div
           className="rounded-lg p-5"
@@ -120,10 +106,6 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
             border: `2px solid ${primaryColor}30`
           }}
         >
-          <div className="flex items-center gap-3 mb-3">
-            <Heart className="h-6 w-6" style={{ color: primaryColor }} />
-            <span className="font-bold text-2xl text-gray-800">{data.petName}</span>
-          </div>
           <div className="grid grid-cols-2 gap-3 text-lg text-gray-600">
             <div><span className="font-semibold">סוג:</span> {speciesLabels[data.petSpecies] || data.petSpecies}</div>
             {data.petBreed && <div><span className="font-semibold">גזע:</span> {data.petBreed}</div>}
@@ -133,80 +115,153 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
           </div>
         </div>
 
-        {/* Diagnoses */}
-        {data.diagnoses.length > 0 && (
-          <div style={{ pageBreakInside: 'avoid' }}>
-            <div className="flex items-center gap-3 mb-3">
+        {/* 1. היסטוריה כללית */}
+        {data.generalHistory && (
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
+              <History className="h-6 w-6" style={{ color: primaryColor }} />
+              <h3 className="font-bold text-xl text-gray-800">היסטוריה כללית</h3>
+            </div>
+            <p className="text-lg whitespace-pre-wrap text-gray-700 pt-2">{data.generalHistory}</p>
+          </div>
+        )}
+
+        {/* 2. היסטוריה רפואית */}
+        {data.medicalHistory && (
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
+              <History className="h-6 w-6" style={{ color: primaryColor }} />
+              <h3 className="font-bold text-xl text-gray-800">היסטוריה רפואית</h3>
+            </div>
+            <p className="text-lg whitespace-pre-wrap text-gray-700 pt-2">{data.medicalHistory}</p>
+          </div>
+        )}
+
+        {/* 3. היסטוריה נוכחית */}
+        {data.currentHistory && (
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
+              <History className="h-6 w-6" style={{ color: primaryColor }} />
+              <h3 className="font-bold text-xl text-gray-800">היסטוריה נוכחית</h3>
+            </div>
+            <p className="text-lg whitespace-pre-wrap text-gray-700 pt-2">{data.currentHistory}</p>
+          </div>
+        )}
+
+        {/* Physical Examination */}
+        {data.physicalExam && (
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
+              <ClipboardList className="h-6 w-6" style={{ color: primaryColor }} />
+              <h3 className="font-bold text-xl text-gray-800">בדיקה פיזיקלית</h3>
+            </div>
+            <p className="text-lg whitespace-pre-wrap text-gray-700 pt-2">
+              {data.physicalExam}
+            </p>
+          </div>
+        )}
+
+        {/* 5. טיפול (כולל אבחנות, טיפולים ותרופות) */}
+        {(data.diagnoses.length > 0 || data.treatments.length > 0 || data.medications.length > 0) && (
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
               <Stethoscope className="h-6 w-6" style={{ color: primaryColor }} />
-              <h3 className="font-bold text-xl text-gray-800">אבחנות</h3>
+              <h3 className="font-bold text-xl text-gray-800">טיפול</h3>
             </div>
-            <div className="space-y-2">
-              {data.diagnoses.map((d, idx) => (
-                <div key={idx} className="text-lg bg-red-50 border-r-4 border-red-400 rounded-lg px-4 py-3">
-                  <p className="font-semibold text-gray-800">{d.diagnosis}</p>
-                  {d.notes && <p className="text-gray-600 mt-1">{d.notes}</p>}
+            <div className="space-y-4 pt-2">
+              {/* אבחנות */}
+              {data.diagnoses.length > 0 && (
+                <div>
+                  <p className="font-bold text-gray-800 mb-2">אבחנות:</p>
+                  {data.diagnoses.map((d, idx) => (
+                    <div key={idx} className="text-lg">
+                      <p className="text-gray-700">{d.diagnosis} -</p>
+                      {d.notes && <p className="text-gray-500 mr-4">{d.notes}</p>}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {/* טיפולים */}
+              {data.treatments.length > 0 && (
+                <div>
+                  <p className="font-bold text-gray-800 mb-2">טיפולים שבוצעו:</p>
+                  {data.treatments.map((t, idx) => (
+                    <div key={idx} className="text-lg">
+                      <p className="text-gray-700">{t.treatment} -</p>
+                      {t.notes && <p className="text-gray-500 mr-4">{t.notes}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* תרופות */}
+              {data.medications.length > 0 && (
+                <div>
+                  <p className="font-bold text-gray-800 mb-2">תרופות:</p>
+                  {data.medications.map((m, idx) => (
+                    <div key={idx} className="text-lg mb-2">
+                      <p className="text-gray-700">{m.medication} -</p>
+                      <div className="text-gray-500 mr-4">
+                        {m.dosage && <p>מינון: {m.dosage}</p>}
+                        {m.frequency && <p>תדירות: {m.frequency}</p>}
+                        {m.duration && <p>משך: {m.duration}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Treatments */}
-        {data.treatments.length > 0 && (
-          <div style={{ pageBreakInside: 'avoid' }}>
-            <div className="flex items-center gap-3 mb-3">
+        {/* 6. סיכום לבעלים */}
+        {data.notesToOwner && (
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
               <FileText className="h-6 w-6" style={{ color: primaryColor }} />
-              <h3 className="font-bold text-xl text-gray-800">טיפולים שבוצעו</h3>
+              <h3 className="font-bold text-xl text-gray-800">סיכום לבעלים</h3>
             </div>
-            <div className="space-y-2">
-              {data.treatments.map((t, idx) => (
-                <div key={idx} className="text-lg bg-blue-50 border-r-4 border-blue-400 rounded-lg px-4 py-3">
-                  <p className="font-semibold text-gray-800">{t.treatment}</p>
-                  {t.notes && <p className="text-gray-600 mt-1">{t.notes}</p>}
-                </div>
-              ))}
-            </div>
+            <p className="text-lg whitespace-pre-wrap text-gray-700 pt-2">{data.notesToOwner}</p>
           </div>
         )}
 
-        {/* Medications */}
-        {data.medications.length > 0 && (
-          <div style={{ pageBreakInside: 'avoid' }}>
-            <div className="flex items-center gap-3 mb-3">
-              <Pill className="h-6 w-6" style={{ color: primaryColor }} />
-              <h3 className="font-bold text-xl text-gray-800">תרופות</h3>
-            </div>
-            <div className="space-y-3">
-              {data.medications.map((m, idx) => (
-                <div key={idx} className="text-lg bg-green-50 border-r-4 border-green-400 rounded-lg px-4 py-3">
-                  <p className="font-bold text-gray-800 text-xl">{m.medication}</p>
-                  <div className="text-gray-600 space-y-1 mt-2">
-                    {m.dosage && <p><span className="font-semibold">מינון:</span> {m.dosage}</p>}
-                    {m.frequency && <p><span className="font-semibold">תדירות:</span> {m.frequency}</p>}
-                    {m.duration && <p><span className="font-semibold">משך:</span> {m.duration}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recommendations */}
+        {/* 7. הנחיות להמשך */}
         {data.recommendations && (
-          <div style={{ pageBreakInside: 'avoid' }}>
-            <h3 className="font-bold text-xl text-gray-800 mb-3">המלצות</h3>
-            <p className="text-lg bg-yellow-50 border-r-4 border-yellow-500 rounded-lg px-4 py-3 whitespace-pre-wrap text-gray-700">
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
+              <Heart className="h-6 w-6" style={{ color: primaryColor }} />
+              <h3 className="font-bold text-xl text-gray-800">הנחיות להמשך</h3>
+            </div>
+            <p className="text-lg whitespace-pre-wrap text-gray-700 pt-2">
               {data.recommendations}
             </p>
           </div>
         )}
 
-        {/* Charges */}
+        {/* 8. תור המשך */}
+        {data.nextAppointment && (
+          <div
+            className="flex items-center gap-3 rounded-lg p-4"
+            style={{
+              backgroundColor: `${primaryColor}10`,
+              border: `2px solid ${primaryColor}30`
+            }}
+          >
+            <Clock className="h-6 w-6" style={{ color: primaryColor }} />
+            <div className="text-lg">
+              <span className="font-bold">תור המשך: </span>
+              <span>{data.nextAppointment}</span>
+            </div>
+          </div>
+        )}
+
+        {/* 9. חיוב */}
         {data.charges && data.charges.length > 0 && (
-          <div style={{ pageBreakInside: 'avoid' }}>
-            <div className="flex items-center gap-3 mb-3">
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-3 border-b-2 border-gray-300 pb-2">
               <Receipt className="h-6 w-6" style={{ color: primaryColor }} />
-              <h3 className="font-bold text-xl text-gray-800">חיובים</h3>
+              <h3 className="font-bold text-xl text-gray-800">חיוב</h3>
             </div>
             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
               {data.charges.map((charge, idx) => (
@@ -228,31 +283,6 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
                 </span>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Next Appointment */}
-        {data.nextAppointment && (
-          <div
-            className="flex items-center gap-3 rounded-lg p-4"
-            style={{
-              backgroundColor: `${primaryColor}10`,
-              border: `2px solid ${primaryColor}30`
-            }}
-          >
-            <Clock className="h-6 w-6" style={{ color: primaryColor }} />
-            <div className="text-lg">
-              <span className="font-bold">תור המשך: </span>
-              <span>{data.nextAppointment}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Notes to Owner */}
-        {data.notesToOwner && (
-          <div className="bg-purple-50 border-2 border-purple-300 rounded-lg p-4" style={{ pageBreakInside: 'avoid' }}>
-            <h3 className="font-bold text-lg mb-2 text-purple-800">הערות לבעלים</h3>
-            <p className="text-lg whitespace-pre-wrap text-gray-700">{data.notesToOwner}</p>
           </div>
         )}
       </div>
