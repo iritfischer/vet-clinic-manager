@@ -972,8 +972,7 @@ const ClientProfile = () => {
                             const now = new Date();
                             const years = Math.floor((now.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
                             const months = Math.floor(((now.getTime() - birthDate.getTime()) % (365.25 * 24 * 60 * 60 * 1000)) / (30.44 * 24 * 60 * 60 * 1000));
-                            if (years > 0) return `${years} שנים`;
-                            return `${months} חודשים`;
+                            return `${years}.${months}`;
                           })() : 'לא ידוע'}
                         </Badge>
                       </div>
@@ -1212,13 +1211,25 @@ const ClientProfile = () => {
                                   const sexValue = formData.get(`sex-${pet.id}`) as string;
                                   const neuterCheckbox = form.querySelector(`input[name="neuter-${pet.id}"]`) as HTMLInputElement;
 
+                                  // Calculate birth_date from age years and months
+                                  const ageYears = parseInt(formData.get('age_years') as string) || 0;
+                                  const ageMonths = parseInt(formData.get('age_months') as string) || 0;
+                                  let birthDate: string | null = null;
+                                  if (ageYears > 0 || ageMonths > 0) {
+                                    const now = new Date();
+                                    const birth = new Date(now);
+                                    birth.setFullYear(birth.getFullYear() - ageYears);
+                                    birth.setMonth(birth.getMonth() - ageMonths);
+                                    birthDate = birth.toISOString().split('T')[0];
+                                  }
+
                                   const updateData = {
                                     name: formData.get('name') as string || pet.name,
                                     species: formData.get('species') as string || pet.species,
                                     breed: formData.get('breed') as string || null,
                                     sex: sexValue || pet.sex,
                                     color_markings: formData.get('color_markings') as string || null,
-                                    birth_date: formData.get('birth_date') as string || null,
+                                    birth_date: birthDate,
                                     microchip_number: formData.get('microchip_number') as string || null,
                                     license_number: formData.get('license_number') as string || null,
                                     neuter_status: neuterCheckbox?.checked ? 'neutered' : (pet.neuter_status === 'neutered' ? 'neutered' : 'intact'),
@@ -1343,20 +1354,35 @@ const ClientProfile = () => {
                                 </div>
                               </div>
 
-                              {/* תאריך לידה */}
+                              {/* גיל */}
                               <div>
-                                <label className="text-sm font-medium mb-2 block">תאריך לידה:</label>
-                                <input
-                                  type="date"
-                                  name="birth_date"
-                                  defaultValue={pet.birth_date || ''}
-                                  className="w-full px-3 py-2 border rounded-md text-right"
-                                />
-                                {pet.birth_date && (
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    גיל: {Math.floor((new Date().getTime() - new Date(pet.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} שנים
-                                  </p>
-                                )}
+                                <label className="text-sm font-medium mb-2 block">גיל:</label>
+                                <div className="flex gap-4 items-center flex-row-reverse">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm">שנים</span>
+                                    <input
+                                      type="number"
+                                      name="age_years"
+                                      min="0"
+                                      max="30"
+                                      defaultValue={pet.birth_date ? Math.floor((new Date().getTime() - new Date(pet.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : ''}
+                                      className="w-20 px-3 py-2 border rounded-md text-center"
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm">חודשים</span>
+                                    <input
+                                      type="number"
+                                      name="age_months"
+                                      min="0"
+                                      max="11"
+                                      defaultValue={pet.birth_date ? Math.floor(((new Date().getTime() - new Date(pet.birth_date).getTime()) % (365.25 * 24 * 60 * 60 * 1000)) / (30.44 * 24 * 60 * 60 * 1000)) : ''}
+                                      className="w-20 px-3 py-2 border rounded-md text-center"
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                </div>
                               </div>
 
                               {/* מספר שבב */}

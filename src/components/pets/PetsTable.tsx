@@ -68,9 +68,20 @@ export const PetsTable = ({ pets, onEdit, onDelete }: PetsTableProps) => {
               </TableRow>
             ) : (
               pets.map((pet) => {
-                const age = pet.birth_date
-                  ? new Date().getFullYear() - new Date(pet.birth_date).getFullYear()
-                  : null;
+                let ageDisplay: string | null = null;
+                if (pet.birth_date) {
+                  const birthDate = new Date(pet.birth_date);
+                  const now = new Date();
+                  const years = Math.floor((now.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+                  const months = Math.floor(((now.getTime() - birthDate.getTime()) % (365.25 * 24 * 60 * 60 * 1000)) / (30.44 * 24 * 60 * 60 * 1000));
+                  if (years > 0 && months > 0) {
+                    ageDisplay = `${years} שנים ו-${months} ח'`;
+                  } else if (years > 0) {
+                    ageDisplay = `${years} שנים`;
+                  } else {
+                    ageDisplay = `${months} חודשים`;
+                  }
+                }
 
                 return (
                   <TableRow key={pet.id}>
@@ -96,7 +107,7 @@ export const PetsTable = ({ pets, onEdit, onDelete }: PetsTableProps) => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {age !== null ? `${age} שנים` : <span className="text-muted-foreground">-</span>}
+                      {ageDisplay ? ageDisplay : <span className="text-muted-foreground">-</span>}
                     </TableCell>
                     <TableCell>
                       {pet.current_weight ? (

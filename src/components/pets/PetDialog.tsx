@@ -48,7 +48,8 @@ const petSchema = z.object({
   species: z.string().min(1, 'יש לבחור סוג'),
   breed: z.string().max(100).optional().or(z.literal('')),
   client_id: z.string().min(1, 'יש לבחור בעלים'),
-  birth_date: z.string().optional().or(z.literal('')),
+  age_years: z.string().optional().or(z.literal('')),
+  age_months: z.string().optional().or(z.literal('')),
   sex: z.string().optional().or(z.literal('')),
   color_markings: z.string().max(500).optional().or(z.literal('')),
   microchip_number: z.string().max(50).optional().or(z.literal('')),
@@ -57,6 +58,28 @@ const petSchema = z.object({
   current_weight: z.string().optional().or(z.literal('')),
   status: z.enum(['active', 'inactive', 'deceased']),
 });
+
+// Helper function to calculate age from birth_date
+const calculateAgeFromBirthDate = (birthDate: string | null): { years: string; months: string } => {
+  if (!birthDate) return { years: '', months: '' };
+  const birth = new Date(birthDate);
+  const now = new Date();
+  const years = Math.floor((now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+  const months = Math.floor(((now.getTime() - birth.getTime()) % (365.25 * 24 * 60 * 60 * 1000)) / (30.44 * 24 * 60 * 60 * 1000));
+  return { years: years.toString(), months: months.toString() };
+};
+
+// Helper function to calculate birth_date from age
+const calculateBirthDateFromAge = (years: string, months: string): string | null => {
+  const y = parseInt(years) || 0;
+  const m = parseInt(months) || 0;
+  if (y === 0 && m === 0) return null;
+  const now = new Date();
+  const birth = new Date(now);
+  birth.setFullYear(birth.getFullYear() - y);
+  birth.setMonth(birth.getMonth() - m);
+  return birth.toISOString().split('T')[0];
+};
 
 type PetFormData = z.infer<typeof petSchema>;
 
@@ -79,7 +102,8 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
       species: '',
       breed: '',
       client_id: '',
-      birth_date: '',
+      age_years: '',
+      age_months: '',
       sex: '',
       color_markings: '',
       microchip_number: '',
@@ -98,12 +122,14 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
 
   useEffect(() => {
     if (pet) {
+      const age = calculateAgeFromBirthDate(pet.birth_date);
       reset({
         name: pet.name,
         species: pet.species,
         breed: pet.breed || '',
         client_id: pet.client_id,
-        birth_date: pet.birth_date || '',
+        age_years: age.years,
+        age_months: age.months,
         sex: pet.sex || '',
         color_markings: pet.color_markings || '',
         microchip_number: pet.microchip_number || '',
@@ -118,7 +144,8 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
         species: '',
         breed: '',
         client_id: defaultClientId || '',
-        birth_date: '',
+        age_years: '',
+        age_months: '',
         sex: '',
         color_markings: '',
         microchip_number: '',
@@ -144,10 +171,14 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
   };
 
   const onSubmit = (data: PetFormData) => {
+    const birthDate = calculateBirthDateFromAge(data.age_years || '', data.age_months || '');
     const cleanedData = {
-      ...data,
+      name: data.name,
+      species: data.species,
+      client_id: data.client_id,
+      status: data.status,
       breed: data.breed || null,
-      birth_date: data.birth_date || null,
+      birth_date: birthDate,
       sex: data.sex || null,
       color_markings: data.color_markings || null,
       microchip_number: data.microchip_number || null,
@@ -253,12 +284,33 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="birth_date">תאריך לידה</Label>
-                  <Input
-                    id="birth_date"
-                    type="date"
-                    {...register('birth_date')}
-                  />
+                  <Label>גיל</Label>
+                  <div className="flex gap-4 items-center flex-row-reverse">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">שנים</span>
+                      <Input
+                        id="age_years"
+                        type="number"
+                        min="0"
+                        max="30"
+                        className="w-20 text-center"
+                        placeholder="0"
+                        {...register('age_years')}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">חודשים</span>
+                      <Input
+                        id="age_months"
+                        type="number"
+                        min="0"
+                        max="11"
+                        className="w-20 text-center"
+                        placeholder="0"
+                        {...register('age_months')}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
