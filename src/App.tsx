@@ -14,6 +14,7 @@ import Leads from "./pages/Leads";
 import Pets from "./pages/Pets";
 import Appointments from "./pages/Appointments";
 import Visits from "./pages/Visits";
+import Vaccinations from "./pages/Vaccinations";
 import Reminders from "./pages/Reminders";
 import WhatsApp from "./pages/WhatsApp";
 import Pricing from "./pages/Pricing";
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/pets" element={<Pets />} />
             <Route path="/appointments" element={<Appointments />} />
             <Route path="/visits" element={<Visits />} />
+            <Route path="/vaccinations" element={<Vaccinations />} />
             <Route path="/reminders" element={<Reminders />} />
             <Route path="/whatsapp" element={<WhatsApp />} />
             <Route path="/pricing" element={<Pricing />} />

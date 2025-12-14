@@ -689,6 +689,62 @@ export type Database = {
         }
         Relationships: []
       }
+      vaccinations: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          description: string | null
+          id: string
+          interval_days: number
+          is_active: boolean | null
+          label: string
+          name: string
+          price_with_vat: number | null
+          price_without_vat: number | null
+          sort_order: number | null
+          species: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          interval_days: number
+          is_active?: boolean | null
+          label: string
+          name: string
+          price_with_vat?: number | null
+          price_without_vat?: number | null
+          sort_order?: number | null
+          species: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          interval_days?: number
+          is_active?: boolean | null
+          label?: string
+          name?: string
+          price_with_vat?: number | null
+          price_without_vat?: number | null
+          sort_order?: number | null
+          species?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vaccinations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       visit_price_items: {
         Row: {
           clinic_id: string
@@ -741,6 +797,7 @@ export type Database = {
           status: string | null
           treatments: Json | null
           updated_at: string
+          vaccinations: Json | null
           vet_id: string | null
           visit_date: string
           visit_type: string
@@ -766,6 +823,7 @@ export type Database = {
           status?: string | null
           treatments?: Json | null
           updated_at?: string
+          vaccinations?: Json | null
           vet_id?: string | null
           visit_date?: string
           visit_type: string
@@ -791,6 +849,7 @@ export type Database = {
           status?: string | null
           treatments?: Json | null
           updated_at?: string
+          vaccinations?: Json | null
           vet_id?: string | null
           visit_date?: string
           visit_type?: string
@@ -1058,5 +1117,5 @@ export const Constants = {
     },
   },
 } as const
-A new version of Supabase CLI is available: v2.62.10 (currently installed v2.53.6)
+A new version of Supabase CLI is available: v2.65.5 (currently installed v2.53.6)
 We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

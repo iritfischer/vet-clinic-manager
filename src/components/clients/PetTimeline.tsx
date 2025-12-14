@@ -144,6 +144,25 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
           icon: isVaccination ? <Syringe className="h-4 w-4" /> : <Stethoscope className="h-4 w-4" />,
           color: isVaccination ? 'bg-green-500' : 'bg-blue-500',
         });
+
+        // If visit has vaccinations array, add separate events for each vaccination
+        if (visit.vaccinations && Array.isArray(visit.vaccinations) && visit.vaccinations.length > 0) {
+          visit.vaccinations.forEach((vacc: any, idx: number) => {
+            if (vacc.vaccination_type) {
+              timelineEvents.push({
+                id: `${visit.id}-vacc-${idx}`,
+                type: 'visit',
+                date: vacc.vaccination_date || visit.visit_date,
+                title: `חיסון - ${vacc.vaccination_type}`,
+                subtitle: vacc.notes || undefined,
+                details: { ...visit, vaccination: vacc },
+                status: visit.status || 'open',
+                icon: <Syringe className="h-4 w-4" />,
+                color: 'bg-green-500',
+              });
+            }
+          });
+        }
       });
 
       // Add completed reminders as milestones
@@ -177,8 +196,15 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
         });
       });
 
-      // Sort all events by date (newest first)
-      timelineEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // Sort all events by date (newest first - latest event appears at the top)
+      timelineEvents.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        // If dates are equal, maintain original order
+        if (dateA === dateB) return 0;
+        // Newest (latest) date first - descending order
+        return dateB - dateA;
+      });
 
       setEvents(timelineEvents);
     } catch (error) {
@@ -416,6 +442,29 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
                                       <p className="font-medium">{m.medication}</p>
                                       {m.dosage && <p className="text-muted-foreground text-xs">מינון: {m.dosage}</p>}
                                       {m.frequency && <p className="text-muted-foreground text-xs">תדירות: {m.frequency}</p>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {event.details?.vaccinations && Array.isArray(event.details.vaccinations) && event.details.vaccinations.length > 0 && (
+                              <div>
+                                <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                                  <Syringe className="h-4 w-4 text-green-600" />
+                                  חיסונים
+                                </p>
+                                <div className="space-y-2">
+                                  {event.details.vaccinations.map((v: any, idx: number) => (
+                                    <div key={idx} className="text-sm bg-green-50 border border-green-200 rounded p-2">
+                                      <p className="font-medium text-green-800">{v.vaccination_type}</p>
+                                      {v.vaccination_date && (
+                                        <p className="text-muted-foreground text-xs">תאריך: {format(new Date(v.vaccination_date), 'dd/MM/yyyy', { locale: he })}</p>
+                                      )}
+                                      {v.next_vaccination_date && (
+                                        <p className="text-green-600 text-xs">חיסון הבא: {format(new Date(v.next_vaccination_date), 'dd/MM/yyyy', { locale: he })}</p>
+                                      )}
+                                      {v.notes && <p className="text-muted-foreground text-xs mt-1">{v.notes}</p>}
                                     </div>
                                   ))}
                                 </div>

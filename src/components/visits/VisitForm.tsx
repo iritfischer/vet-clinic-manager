@@ -24,6 +24,8 @@ import { format, addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { TagInput } from '@/components/shared/TagInput';
 import { useToast } from '@/hooks/use-toast';
+import { useVaccinations } from '@/hooks/useVaccinations';
+import { getNextVaccinationDate, extractVaccinationType } from '@/lib/vaccinationUtils';
 import {
   Dialog,
   DialogContent,
@@ -57,26 +59,7 @@ const VISIT_TYPES = [
   { value: 'other', label: 'אחר' },
 ];
 
-// סוגי חיסונים עם מרווחי זמן לתזכורת הבאה (בימים)
-const VACCINATION_TYPES = {
-  dog: [
-    { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
-    { value: 'dhpp', label: 'משושה (DHPP)', nextDueDays: 365 },
-    { value: 'leptospirosis', label: 'לפטוספירוזיס', nextDueDays: 365 },
-    { value: 'bordetella', label: 'בורדטלה (שיעול מלונות)', nextDueDays: 180 },
-    { value: 'lyme', label: 'ליים', nextDueDays: 365 },
-  ],
-  cat: [
-    { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
-    { value: 'fvrcp', label: 'משולש (FVRCP)', nextDueDays: 365 },
-    { value: 'felv', label: 'לויקמיה (FeLV)', nextDueDays: 365 },
-    { value: 'fiv', label: 'איידס חתולים (FIV)', nextDueDays: 365 },
-  ],
-  other: [
-    { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
-    { value: 'other', label: 'אחר', nextDueDays: 365 },
-  ],
-};
+// VACCINATION_TYPES הוסר - כעת נטען מטבלת vaccinations
 
 const visitSchema = z.object({
   client_id: z.string().min(1, 'יש לבחור לקוח'),
@@ -84,6 +67,7 @@ const visitSchema = z.object({
   visit_type: z.string().min(1, 'יש לבחור סוג ביקור').max(100),
   vaccination_type: z.string().optional(),
   vaccination_date: z.string().optional(),
+  next_vaccination_date: z.string().optional(),
   visit_date: z.string().min(1, 'יש להזין תאריך'),
   chief_complaint: z.string().max(1000).optional().or(z.literal('')),
   general_history: z.string().max(2000).optional().or(z.literal('')),
@@ -103,6 +87,12 @@ const visitSchema = z.object({
     medication: z.string(),
     dosage: z.string().optional(),
     frequency: z.string().optional(),
+  })).optional(),
+  vaccinations: z.array(z.object({
+    vaccination_type: z.string(),
+    vaccination_date: z.string().optional(),
+    next_vaccination_date: z.string().optional(),
+    notes: z.string().optional(),
   })).optional(),
   recommendations: z.string().max(2000).optional().or(z.literal('')),
   client_summary: z.string().max(2000).optional().or(z.literal('')),
@@ -140,6 +130,9 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(preSelectedClientId || '');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [nextVaccinationDate, setNextVaccinationDate] = useState<Date | null>(null);
+  const { vaccinations: availableVaccinations, getVaccinationByName, getVaccinationsBySpecies } = useVaccinations();
+  const [preSelectedPetSpecies, setPreSelectedPetSpecies] = useState<'dog' | 'cat' | 'other' | undefined>(undefined);
 
   // State for new price item dialog
   const [showNewPriceItemDialog, setShowNewPriceItemDialog] = useState(false);
@@ -160,6 +153,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       visit_type: '',
       vaccination_type: '',
       vaccination_date: new Date().toISOString().slice(0, 10),
+      next_vaccination_date: '',
       visit_date: new Date().toISOString().slice(0, 16),
       chief_complaint: '',
       general_history: '',
@@ -170,6 +164,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       diagnoses: [],
       treatments: [],
       medications: [],
+      vaccinations: [],
       recommendations: '',
       client_summary: '',
       status: 'open',
@@ -178,7 +173,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     },
   });
 
-  const { register, handleSubmit, watch, setValue, reset, control, formState: { errors, isDirty } } = formMethods;
+  const { register, handleSubmit, watch, setValue, reset, control, getValues, formState: { errors, isDirty } } = formMethods;
 
   // Reset form when visit or draftDataToRestore changes to null (new visit)
   useEffect(() => {
@@ -189,6 +184,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
         visit_type: '',
         vaccination_type: '',
         vaccination_date: new Date().toISOString().slice(0, 10),
+        next_vaccination_date: '',
         visit_date: new Date().toISOString().slice(0, 16),
         chief_complaint: '',
         general_history: '',
@@ -199,6 +195,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
         diagnoses: [],
         treatments: [],
         medications: [],
+        vaccinations: [],
         recommendations: '',
         client_summary: '',
         status: 'open',
@@ -279,14 +276,20 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     name: 'medications',
   });
 
+  const { fields: vaccinationsFields, append: appendVaccination, remove: removeVaccination } = useFieldArray({
+    control,
+    name: 'vaccinations',
+  });
+
   // Track which items have already been added to pricing to avoid duplicates
   const [addedToPricing, setAddedToPricing] = useState<Set<string>>(new Set());
   // Track items that need price input (not found in pricing)
-  const [itemsNeedingPrice, setItemsNeedingPrice] = useState<Map<string, { type: 'medication' | 'treatment'; index: number; name: string; category: string }>>(new Map());
+  const [itemsNeedingPrice, setItemsNeedingPrice] = useState<Map<string, { type: 'medication' | 'treatment' | 'vaccination'; index: number; name: string; category: string }>>(new Map());
   // Track price inputs for new items
   const [newItemPrices, setNewItemPrices] = useState<Map<string, { price_with_vat: string; price_without_vat: string }>>(new Map());
   const medications = watch('medications') || [];
   const treatments = watch('treatments') || [];
+  const vaccinations = watch('vaccinations') || [];
 
   // Helper function to find price item (without creating)
   const findPriceItem = async (name: string, category: string): Promise<string | null> => {
@@ -445,11 +448,52 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   // Auto-add vaccinations to pricing when vaccination type is selected
   const visitType = watch('visit_type');
   const vaccinationType = watch('vaccination_type');
+  const petId = watch('pet_id');
+  const vaccinationDate = watch('vaccination_date');
+  const nextVaccinationDateForm = watch('next_vaccination_date');
+
+  // Calculate next vaccination date when vaccination type or pet changes
+  useEffect(() => {
+    const calculateNextDate = async () => {
+      if (!visitType?.includes('vaccination') || !vaccinationType || !petId || !clinicId) {
+        setNextVaccinationDate(null);
+        return;
+      }
+
+      const pet = pets.find(p => p.id === petId);
+      if (!pet || !pet.species) {
+        setNextVaccinationDate(null);
+        return;
+      }
+      const petSpecies = pet.species as 'dog' | 'cat' | 'other';
+      const vaccination = getVaccinationByName(vaccinationType, petSpecies);
+      if (!vaccination) {
+        setNextVaccinationDate(null);
+        return;
+      }
+
+      try {
+        const nextDate = await getNextVaccinationDate(petId, vaccinationType, vaccination, clinicId);
+        setNextVaccinationDate(nextDate);
+        // Set the calculated date in the form if not manually set
+        if (!nextVaccinationDateForm && nextDate) {
+          setValue('next_vaccination_date', format(nextDate, 'yyyy-MM-dd'));
+        }
+      } catch (error) {
+        console.error('Error calculating next vaccination date:', error);
+        setNextVaccinationDate(null);
+      }
+    };
+
+    calculateNextDate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitType, vaccinationType, petId, vaccinationDate, clinicId, availableVaccinations]);
+
   useEffect(() => {
     if (visitType?.includes('vaccination') && vaccinationType && vaccinationType.trim()) {
       const key = `vaccination-${vaccinationType}`;
       if (!addedToPricing.has(key)) {
-        findPriceItem(vaccinationType.trim(), 'חיסונים').then(priceItemId => {
+        findPriceItem(vaccinationType.trim(), 'vaccination').then(priceItemId => {
           if (priceItemId) {
             // Check if already in price_items to avoid duplicates
             const currentPriceItems = watch('price_items') || [];
@@ -464,6 +508,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visitType, vaccinationType]);
+
 
   const { fields: priceItemsFields, append: appendPriceItem, remove: removePriceItem } = useFieldArray({
     control,
@@ -483,18 +528,56 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   }, [clinicId]);
 
   useEffect(() => {
+    if (preSelectedClientId) {
+      setSelectedClientId(preSelectedClientId);
+    }
+  }, [preSelectedClientId]);
+
+  useEffect(() => {
     if (selectedClientId) {
       fetchPets(selectedClientId);
     } else {
       setPets([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClientId]);
 
+  // Fetch pet species if preSelectedPetId is provided but pet not in pets array yet
   useEffect(() => {
-    if (preSelectedClientId) {
-      setSelectedClientId(preSelectedClientId);
+    if (!preSelectedPetId || !clinicId) return;
+    
+    const pet = pets.find(p => p.id === preSelectedPetId);
+    if (pet) {
+      // Pet found in pets array - use its species
+      setPreSelectedPetSpecies(pet.species as 'dog' | 'cat' | 'other');
+    } else {
+      // Pet not in pets array yet - fetch species directly
+      supabase
+        .from('pets')
+        .select('species')
+        .eq('id', preSelectedPetId)
+        .single()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            setPreSelectedPetSpecies(data.species as 'dog' | 'cat' | 'other');
+          }
+        });
     }
-  }, [preSelectedClientId]);
+  }, [preSelectedPetId, clinicId, pets]);
+
+  // Set pet_id in form when preSelectedPetId is provided and pets are loaded
+  useEffect(() => {
+    if (preSelectedPetId && pets.length > 0) {
+      const currentPetId = watch('pet_id');
+      if (!currentPetId || currentPetId !== preSelectedPetId) {
+        // Verify the pet exists before setting
+        const petExists = pets.some(p => p.id === preSelectedPetId);
+        if (petExists) {
+          setValue('pet_id', preSelectedPetId, { shouldValidate: true });
+        }
+      }
+    }
+  }, [preSelectedPetId, pets, setValue, watch]);
 
   // Restore draft data if available
   useEffect(() => {
@@ -524,6 +607,8 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
         const parts = visit.visit_type.split(':');
         visitType = 'vaccination';
         vaccinationType = parts[1] || '';
+      } else {
+        vaccinationType = extractVaccinationType(visit.visit_type) || '';
       }
 
       // Load price items for this visit
@@ -538,6 +623,19 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
           priceItemsData = visitPriceItems.map((item: any) => ({
             item_id: item.price_item_id,
             quantity: item.quantity,
+          }));
+        }
+      }
+
+      // Parse vaccinations array from visit
+      let vaccinationsData: any[] = [];
+      if (visit.vaccinations) {
+        if (Array.isArray(visit.vaccinations)) {
+          vaccinationsData = visit.vaccinations.map((vacc: any) => ({
+            vaccination_type: vacc.vaccination_type || '',
+            vaccination_date: vacc.vaccination_date || new Date().toISOString().slice(0, 10),
+            next_vaccination_date: vacc.next_vaccination_date || '',
+            notes: vacc.notes || '',
           }));
         }
       }
@@ -559,6 +657,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
         diagnoses: Array.isArray(visit.diagnoses) ? visit.diagnoses as any : [],
         treatments: Array.isArray(visit.treatments) ? visit.treatments as any : [],
         medications: Array.isArray(visit.medications) ? visit.medications as any : [],
+        vaccinations: vaccinationsData,
         recommendations: visit.recommendations || '',
         client_summary: visit.client_summary || '',
         status: visit.status as 'open' | 'completed' | 'cancelled',
@@ -667,6 +766,23 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   };
 
   const onSubmit = (data: VisitFormData) => {
+    // Validation: ביקור חיסון חייב לכלול פריט תמחור בקטגוריית חיסון
+    if (data.visit_type?.includes('vaccination')) {
+      const hasVaccinationPriceItem = data.price_items && data.price_items.some(item => {
+        const priceItem = priceItems.find(p => p.id === item.item_id);
+        return priceItem?.category === 'vaccination';
+      });
+
+      if (!hasVaccinationPriceItem) {
+        toast({
+          title: 'שגיאת אימות',
+          description: 'ביקור חיסון חייב לכלול לפחות פריט תמחור אחד בקטגוריית חיסון',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     // בנה את visit_type - אם יש חיסון ברשימה, הוסף את סוג החיסון
     let finalVisitType = data.visit_type;
     if (data.visit_type?.includes('vaccination') && data.vaccination_type) {
@@ -691,30 +807,76 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       diagnoses: data.diagnoses?.length ? data.diagnoses : null,
       treatments: data.treatments?.length ? data.treatments : null,
       medications: data.medications?.length ? data.medications : null,
+      vaccinations: data.vaccinations?.length ? data.vaccinations : null,
       status: data.status,
     };
 
-    // אם זה ביקור חיסון, צור תזכורת אוטומטית לחיסון הבא
+    // צור תזכורות אוטומטיות לחיסונים
     let followUps = [...(data.follow_ups || [])];
 
+    // תזכורות מחיסונים שנוספו כפריטים בביקור
+    if (data.vaccinations && data.vaccinations.length > 0 && data.pet_id) {
+      const pet = pets.find(p => p.id === data.pet_id);
+      const petSpecies = pet?.species as 'dog' | 'cat' | 'other' | undefined;
+      
+      for (const vacc of data.vaccinations) {
+        if (!vacc.vaccination_type) continue;
+        
+        const vaccination = petSpecies ? getVaccinationByName(vacc.vaccination_type, petSpecies) : undefined;
+        if (!vaccination || !('interval_days' in vaccination)) continue;
+
+        // Use manually set next vaccination date if provided, otherwise calculate
+        let nextDueDate: Date;
+        if (vacc.next_vaccination_date) {
+          nextDueDate = new Date(vacc.next_vaccination_date);
+        } else {
+          const vaccinationDate = new Date(vacc.vaccination_date || data.visit_date);
+          nextDueDate = addDays(vaccinationDate, vaccination.interval_days);
+        }
+
+        followUps.push({
+          due_date: nextDueDate.toISOString().slice(0, 10),
+          notes: `חיסון ${vaccination.label}${vacc.notes ? ` - ${vacc.notes}` : ''}`,
+          reminder_type: 'vaccination',
+        });
+      }
+    }
+
+    // תזכורת מחיסון שמוגדר כסוג ביקור (אם יש)
     if (data.visit_type?.includes('vaccination') && data.vaccination_type) {
-      // ברירת מחדל: שנה קדימה (365 ימים)
-      const vaccinationDate = new Date(data.vaccination_date || data.visit_date);
-      const nextDueDate = addDays(vaccinationDate, 365);
+      const pet = pets.find(p => p.id === data.pet_id);
+      const petSpecies = pet?.species as 'dog' | 'cat' | 'other' | undefined;
+      const vaccination = petSpecies ? getVaccinationByName(data.vaccination_type, petSpecies) : undefined;
+      const vaccinationConfig = vaccination;
+      
+      // אם יש תאריך מוזן ידנית, השתמש בו, אחרת חשב אוטומטית
+      let nextDueDate: Date;
+      if (data.next_vaccination_date) {
+        nextDueDate = new Date(data.next_vaccination_date);
+      } else if (nextVaccinationDate) {
+        nextDueDate = nextVaccinationDate;
+      } else {
+        // ברירת מחדל: שנה קדימה (365 ימים) או לפי הגדרת החיסון
+        const vaccinationDate = new Date(data.vaccination_date || data.visit_date);
+        const intervalDays = (vaccinationConfig && 'interval_days' in vaccinationConfig) ? vaccinationConfig.interval_days : 365;
+        nextDueDate = addDays(vaccinationDate, intervalDays);
+      }
 
       // הוסף תזכורת אוטומטית לחיסון הבא
+      const vaccinationLabel = (vaccinationConfig && 'label' in vaccinationConfig) ? vaccinationConfig.label : data.vaccination_type;
       followUps.push({
         due_date: nextDueDate.toISOString().slice(0, 10),
-        notes: `חיסון ${data.vaccination_type}`,
+        notes: `חיסון ${vaccinationLabel}`,
         reminder_type: 'vaccination',
       });
     }
 
-    // Send with follow_ups and price_items as separate properties
+    // Send with follow_ups, price_items, and vaccinations as separate properties
     onSave({
       ...cleanedData,
       _follow_ups: followUps,
-      _price_items: data.price_items
+      _price_items: data.price_items,
+      _vaccinations: data.vaccinations || [] // Pass vaccinations separately for processing
     });
   };
 
@@ -888,25 +1050,51 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                     </div>
                   </div>
 
-                  {/* תצוגת תאריך החיסון הבא - חיסון שנתי כברירת מחדל */}
-                  {watch('vaccination_type') && (() => {
-                    const vaccinationDateStr = watch('vaccination_date') || new Date().toISOString().slice(0, 10);
-                    const vaccinationDate = new Date(vaccinationDateStr);
-                    // ברירת מחדל: שנה קדימה (365 ימים)
-                    const nextVaccinationDate = addDays(vaccinationDate, 365);
+                  {/* תצוגת תאריך החיסון הבא עם אפשרות עריכה */}
+                  {watch('vaccination_type') && (watch('pet_id') || preSelectedPetId) && (() => {
+                  const currentPetId = watch('pet_id') || preSelectedPetId || '';
+                  const pet = pets.find(p => p.id === currentPetId);
+                  // Use pet species from pets array, or fallback to preSelectedPetSpecies if pet not loaded yet
+                  const petSpecies = (pet?.species || preSelectedPetSpecies) as 'dog' | 'cat' | 'other' | undefined;
+                    const vaccination = (petSpecies && watch('vaccination_type')) 
+                      ? getVaccinationByName(watch('vaccination_type') || '', petSpecies) 
+                      : undefined;
+                    const displayDate = nextVaccinationDate || (nextVaccinationDateForm ? new Date(nextVaccinationDateForm) : null);
 
                     return (
-                      <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
                         <div className="flex items-center gap-2 text-green-800 flex-wrap">
                           <Calendar className="h-4 w-4" />
-                          <span className="font-medium">חיסון הבא:</span>
-                          <span className="font-bold">
-                            {format(nextVaccinationDate, 'dd/MM/yyyy', { locale: he })}
-                          </span>
-                          <span className="text-sm text-green-600">(שנה)</span>
+                          <span className="font-medium">תאריך החיסון הבא:</span>
+                          {displayDate && (
+                            <span className="font-bold">
+                              {format(displayDate, 'dd/MM/yyyy', { locale: he })}
+                            </span>
+                          )}
+                          {vaccination && 'interval_days' in vaccination && (
+                            <span className="text-sm text-green-600">
+                              ({vaccination.interval_days} ימים)
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm text-green-700">
+                            תאריך מותאם אישית (אופציונלי)
+                          </Label>
+                          <Input
+                            type="date"
+                            {...register('next_vaccination_date')}
+                            className="bg-white text-right"
+                            onChange={(e) => {
+                              setValue('next_vaccination_date', e.target.value);
+                              if (e.target.value) {
+                                setNextVaccinationDate(new Date(e.target.value));
+                              }
+                            }}
+                          />
                         </div>
                         <p className="text-xs text-green-600 mt-1">
-                          תזכורת תיווצר אוטומטית בעת שמירת הביקור
+                          תזכורת ותור ייווצרו אוטומטית בעת שמירת הביקור
                         </p>
                       </div>
                     );
@@ -1271,6 +1459,268 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                                       }
                                     }, 0);
                                     
+                                    toast({
+                                      title: 'הצלחה',
+                                      description: 'הפריט נוסף לתמחור',
+                                    });
+                                  }
+                                }
+                              }}
+                            >
+                              הוסף לתמחור
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* חיסונים */}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <Label>חיסונים</Label>
+                  <Button type="button" size="sm" onClick={() => appendVaccination({ vaccination_type: '', vaccination_date: new Date().toISOString().slice(0, 10), notes: '' })}>
+                    <Plus className="h-4 w-4 ml-2" />
+                    הוסף חיסון
+                  </Button>
+                </div>
+                {vaccinationsFields.map((field, index) => {
+                  const vaccinationType = watch(`vaccinations.${index}.vaccination_type`) || '';
+                  const vaccinationDate = watch(`vaccinations.${index}.vaccination_date`) || new Date().toISOString().slice(0, 10);
+                  const currentPetId = watch('pet_id') || preSelectedPetId || '';
+                  const pet = pets.find(p => p.id === currentPetId);
+                  // Use pet species from pets array, or fallback to preSelectedPetSpecies if pet not loaded yet
+                  const petSpecies = (pet?.species || preSelectedPetSpecies) as 'dog' | 'cat' | 'other' | undefined;
+                  const vaccination = (petSpecies && vaccinationType) 
+                    ? getVaccinationByName(vaccinationType, petSpecies) 
+                    : undefined;
+
+                  const key = vaccinationType ? `vaccination-${index}-${vaccinationType}` : `vaccination-${index}-empty`;
+                  const needsPrice = itemsNeedingPrice.has(key);
+                  const priceData = newItemPrices.get(key) || { price_with_vat: '', price_without_vat: '' };
+                  
+                  return (
+                    <div key={field.id} className="flex gap-2 items-start mb-2 border border-blue-200 rounded-lg p-3 bg-blue-50">
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeVaccination(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <div className="flex-1 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-sm">סוג החיסון</Label>
+                            <Select
+                              value={vaccinationType}
+                              onValueChange={async (value) => {
+                                setValue(`vaccinations.${index}.vaccination_type`, value);
+                                
+                                // Wait a bit for the form state to update
+                                await new Promise(resolve => setTimeout(resolve, 100));
+                                
+                                // Auto-add to pricing if vaccination has pricing defined
+                                const vacc = petSpecies ? getVaccinationByName(value, petSpecies) : undefined;
+                                if (vacc && 'label' in vacc) {
+                                  const newKey = `vaccination-${index}-${value}`;
+                                  
+                                  // Check if vaccination has pricing defined
+                                  if (vacc.price_with_vat && vacc.price_with_vat > 0) {
+                                    // Vaccination has pricing - add automatically
+                                    const vaccLabel = vacc.label;
+                                    const priceWithVat = vacc.price_with_vat;
+                                    const priceWithoutVat = vacc.price_without_vat || (priceWithVat / 1.17);
+                                    
+                                    // First try to find existing price item
+                                    let priceItemId = await findPriceItem(vaccLabel, 'vaccination');
+                                    
+                                    // If not found, create new price item
+                                    if (!priceItemId) {
+                                      priceItemId = await createAndAddPriceItem(vaccLabel, 'vaccination', priceWithVat, priceWithoutVat);
+                                    }
+                                    
+                                    // Add to price items if found/created
+                                    if (priceItemId) {
+                                      // Get current price items using getValues to get the latest state
+                                      const currentPriceItems = getValues('price_items') || [];
+                                      const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+                                      if (!exists) {
+                                        appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                        setAddedToPricing(prev => {
+                                          const newSet = new Set(prev);
+                                          newSet.add(newKey);
+                                          return newSet;
+                                        });
+                                        // Remove from items needing price if it was there
+                                        setItemsNeedingPrice(prev => {
+                                          const newMap = new Map(prev);
+                                          newMap.delete(newKey);
+                                          return newMap;
+                                        });
+                                        toast({
+                                          title: 'הצלחה',
+                                          description: 'החיסון נוסף אוטומטית לפריטי חיוב',
+                                        });
+                                      }
+                                    }
+                                  } else {
+                                    // No pricing defined - check if price item exists, if not show price input
+                                    const priceItemId = await findPriceItem(vacc.label, 'vaccination');
+                                    if (!priceItemId) {
+                                      setItemsNeedingPrice(prev => {
+                                        const newMap = new Map(prev);
+                                        newMap.set(newKey, { type: 'vaccination', index, name: vacc.label, category: 'vaccination' });
+                                        return newMap;
+                                      });
+                                    } else {
+                                      // Price item exists, add it
+                                      const currentPriceItems = getValues('price_items') || [];
+                                      const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+                                      if (!exists) {
+                                        appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                        setAddedToPricing(prev => {
+                                          const newSet = new Set(prev);
+                                          newSet.add(newKey);
+                                          return newSet;
+                                        });
+                                      }
+                                    }
+                                  }
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="bg-white">
+                                <SelectValue placeholder="בחר חיסון" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {currentPetId ? (
+                                  petSpecies ? (() => {
+                                    const vaccList = getVaccinationsBySpecies(petSpecies);
+                                    if (vaccList.length === 0) {
+                                      return <SelectItem value="no-vaccinations" disabled>אין חיסונים זמינים</SelectItem>;
+                                    }
+                                    return vaccList.map((vacc) => (
+                                      <SelectItem key={vacc.id} value={vacc.name}>
+                                        {vacc.label}
+                                      </SelectItem>
+                                    ));
+                                  })() : (
+                                    <SelectItem value="loading-pets" disabled>טוען חיסונים...</SelectItem>
+                                  )
+                                ) : (
+                                  <SelectItem value="select-pet-first" disabled>בחר חיית מחמד קודם</SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-sm">תאריך החיסון</Label>
+                            <Input
+                              type="date"
+                              value={vaccinationDate}
+                              onChange={(e) => setValue(`vaccinations.${index}.vaccination_date`, e.target.value)}
+                              className="bg-white text-right"
+                            />
+                          </div>
+                        </div>
+                        <Input 
+                          {...register(`vaccinations.${index}.notes`)} 
+                          className="text-right bg-white" 
+                          placeholder="הערות (אופציונלי)" 
+                        />
+                        {vaccination && 'interval_days' in vaccination && (() => {
+                          const vaccDate = new Date(vaccinationDate);
+                          const calculatedNextDate = addDays(vaccDate, vaccination.interval_days);
+                          const nextVaccDateValue = watch(`vaccinations.${index}.next_vaccination_date`) || format(calculatedNextDate, 'yyyy-MM-dd');
+                          
+                          return (
+                            <div className="bg-green-50 border border-green-200 rounded p-2 space-y-2">
+                              <Label className="text-sm text-green-800">תאריך החיסון הבא (ניתן לערוך)</Label>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-green-600" />
+                                <Input
+                                  type="date"
+                                  value={nextVaccDateValue}
+                                  onChange={(e) => setValue(`vaccinations.${index}.next_vaccination_date`, e.target.value)}
+                                  className="bg-white text-right text-sm flex-1"
+                                />
+                                <span className="text-xs text-green-600">({vaccination.interval_days} ימים מהחיסון הנוכחי)</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {needsPrice && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2 space-y-2">
+                            <Label className="text-xs text-yellow-800">הפריט לא נמצא במחירון - הזן מחיר:</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs">מחיר ללא מע״מ</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={priceData.price_without_vat}
+                                  onChange={(e) => {
+                                    const withoutVat = e.target.value;
+                                    const withVat = withoutVat ? (parseFloat(withoutVat) * 1.17).toFixed(2) : '';
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                      return newMap;
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="text-right text-sm"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">מחיר כולל מע״מ</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={priceData.price_with_vat}
+                                  onChange={(e) => {
+                                    const withVat = e.target.value;
+                                    const withoutVat = withVat ? (parseFloat(withVat) / 1.17).toFixed(2) : '';
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(key, { price_without_vat: withoutVat, price_with_vat: withVat });
+                                      return newMap;
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="text-right text-sm"
+                                />
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="default"
+                              className="w-full"
+                              disabled={!priceData.price_with_vat || parseFloat(priceData.price_with_vat) <= 0}
+                              onClick={async () => {
+                                const priceWithVat = parseFloat(priceData.price_with_vat);
+                                const priceWithoutVat = parseFloat(priceData.price_without_vat);
+                                if (priceWithVat > 0 && vaccinationType) {
+                                  const vacc = petSpecies ? getVaccinationByName(vaccinationType, petSpecies) : undefined;
+                                  const vaccLabel = (vacc && 'label' in vacc) ? vacc.label : vaccinationType;
+                                  const priceItemId = await createAndAddPriceItem(vaccLabel, 'vaccination', priceWithVat, priceWithoutVat);
+                                  if (priceItemId) {
+                                    const currentPriceItems = watch('price_items') || [];
+                                    const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+                                    if (!exists) {
+                                      appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                    }
+                                    setAddedToPricing(prev => new Set(prev).add(key));
+                                    setItemsNeedingPrice(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(key);
+                                      return newMap;
+                                    });
+                                    setNewItemPrices(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(key);
+                                      return newMap;
+                                    });
                                     toast({
                                       title: 'הצלחה',
                                       description: 'הפריט נוסף לתמחור',

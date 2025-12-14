@@ -19,6 +19,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useClinic } from '@/hooks/useClinic';
 import { useToast } from '@/hooks/use-toast';
+import { useVaccinations } from '@/hooks/useVaccinations';
+import { getNextVaccinationDate, extractVaccinationType } from '@/lib/vaccinationUtils';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { VisitForm } from '@/components/visits/VisitForm';
@@ -111,26 +113,8 @@ const ClientProfile = () => {
   // Ref to trigger form submission
   const formSubmitRef = useRef<(() => void) | null>(null);
 
-  // סוגי חיסונים
-  const VACCINATION_TYPES = {
-    dog: [
-      { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
-      { value: 'dhpp', label: 'משושה (DHPP)', nextDueDays: 365 },
-      { value: 'leptospirosis', label: 'לפטוספירוזיס', nextDueDays: 365 },
-      { value: 'bordetella', label: 'בורדטלה (שיעול מלונות)', nextDueDays: 180 },
-      { value: 'lyme', label: 'ליים', nextDueDays: 365 },
-    ],
-    cat: [
-      { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
-      { value: 'fvrcp', label: 'משולש (FVRCP)', nextDueDays: 365 },
-      { value: 'felv', label: 'לויקמיה (FeLV)', nextDueDays: 365 },
-      { value: 'fiv', label: 'איידס חתולים (FIV)', nextDueDays: 365 },
-    ],
-    other: [
-      { value: 'rabies', label: 'כלבת', nextDueDays: 365 },
-      { value: 'other', label: 'אחר', nextDueDays: 365 },
-    ],
-  };
+  // Load vaccinations from database
+  const { vaccinations, getVaccinationsBySpecies, getVaccinationByName } = useVaccinations();
 
   useEffect(() => {
     if (clientId && clinicId) {
@@ -198,9 +182,10 @@ const ClientProfile = () => {
     try {
       if (!clinicId) return;
 
-      // Extract follow_ups and price_items
+      // Extract follow_ups, price_items, and vaccinations
       const follow_ups = visitData._follow_ups || visitData.follow_ups;
       const price_items = visitData._price_items || visitData.price_items;
+      const vaccinations = visitData._vaccinations || [];
 
       // Build clean object with only valid visits table columns
       const cleanVisitData = {
@@ -215,6 +200,7 @@ const ClientProfile = () => {
         diagnoses: visitData.diagnoses || null,
         treatments: visitData.treatments || null,
         medications: visitData.medications || null,
+        vaccinations: visitData.vaccinations?.length ? visitData.vaccinations : null,
         recommendations: visitData.recommendations || null,
         client_summary: visitData.client_summary || null,
         status: visitData.status || 'open',
@@ -255,6 +241,70 @@ const ClientProfile = () => {
         if (priceItemsError) throw priceItemsError;
       }
 
+      // Get pet species for vaccination lookups
+      let petSpecies: 'dog' | 'cat' | 'other' | undefined;
+      if (visitData.pet_id) {
+        const { data: petData } = await supabase
+          .from('pets')
+          .select('species')
+          .eq('id', visitData.pet_id)
+          .single();
+        if (petData) {
+          petSpecies = petData.species as 'dog' | 'cat' | 'other';
+        }
+      }
+
+      // Create reminders for vaccinations added to visit
+      if (vaccinations && vaccinations.length > 0 && visitData.client_id && visitData.pet_id && petSpecies) {
+        for (const vacc of vaccinations) {
+          if (!vacc.vaccination_type) continue;
+          
+          const vaccination = getVaccinationByName(vacc.vaccination_type, petSpecies);
+          if (!vaccination) continue;
+
+          // Use manually set next vaccination date if provided, otherwise calculate
+          let nextDueDate: Date;
+          if (vacc.next_vaccination_date) {
+            nextDueDate = new Date(vacc.next_vaccination_date);
+          } else {
+            const vaccinationDate = new Date(vacc.vaccination_date || visitData.visit_date);
+            nextDueDate = addDays(vaccinationDate, vaccination.interval_days);
+          }
+
+          // Create reminder
+          await supabase
+            .from('reminders')
+            .insert({
+              clinic_id: clinicId,
+              client_id: visitData.client_id,
+              pet_id: visitData.pet_id,
+              reminder_type: 'vaccination',
+              due_date: nextDueDate.toISOString().slice(0, 10),
+              notes: `חיסון ${vaccination.label}${vacc.notes ? ` - ${vacc.notes}` : ''}`,
+              status: 'open',
+            });
+
+          // Create appointment in calendar (9:00 AM, 30 min duration)
+          const appointmentDate = new Date(nextDueDate);
+          appointmentDate.setHours(9, 0, 0, 0);
+          const endDate = new Date(appointmentDate);
+          endDate.setMinutes(endDate.getMinutes() + 30);
+
+          await supabase
+            .from('appointments')
+            .insert({
+              clinic_id: clinicId,
+              client_id: visitData.client_id,
+              pet_id: visitData.pet_id,
+              appointment_type: `חיסון - ${vaccination.label}`,
+              start_time: appointmentDate.toISOString(),
+              end_time: endDate.toISOString(),
+              notes: `חיסון ${vaccination.label}${vacc.notes ? ` - ${vacc.notes}` : ''}`,
+              status: 'scheduled',
+            });
+        }
+      }
+
       // Save follow-up reminders and appointments
       if (follow_ups && follow_ups.length > 0 && visitData.client_id && visitData.pet_id) {
         for (const followUp of follow_ups) {
@@ -292,10 +342,11 @@ const ClientProfile = () => {
         }
       }
 
+      const totalReminders = (follow_ups?.length || 0) + (vaccinations?.length || 0);
       toast({
         title: 'הצלחה',
-        description: follow_ups?.length > 0
-          ? `הביקור נוסף בהצלחה עם ${follow_ups.length} תזכורות פולואו אפ`
+        description: totalReminders > 0
+          ? `הביקור נוסף בהצלחה עם ${totalReminders} תזכורות`
           : 'הביקור נוסף בהצלחה',
       });
 
@@ -513,16 +564,18 @@ const ClientProfile = () => {
       const pet = pets.find(p => p.id === petId);
       if (!pet || !client) return;
 
-      // מצא את סוג החיסון לקבלת התווית
-      const species = pet.species?.toLowerCase() || 'other';
-      const vaccineList = species.includes('כלב') || species.includes('dog')
-        ? VACCINATION_TYPES.dog
-        : species.includes('חתול') || species.includes('cat')
-        ? VACCINATION_TYPES.cat
-        : VACCINATION_TYPES.other;
-      const selectedVaccine = vaccineList.find(v => v.value === vaccinationForm.vaccination_type);
+      // מצא את סוג החיסון מטבלת החיסונים
+      const petSpecies = pet.species as 'dog' | 'cat' | 'other';
+      const selectedVaccine = getVaccinationByName(vaccinationForm.vaccination_type, petSpecies);
 
-      if (!selectedVaccine) return;
+      if (!selectedVaccine) {
+        toast({
+          title: 'שגיאה',
+          description: 'חיסון לא נמצא',
+          variant: 'destructive',
+        });
+        return;
+      }
 
       // צור ביקור מסוג חיסון
       const visitType = `vaccination:${vaccinationForm.vaccination_type}:${selectedVaccine.label}`;
@@ -550,9 +603,10 @@ const ClientProfile = () => {
 
       // צור תזכורת לחיסון הבא (אם לא ביקשו לדלג)
       let reminderMessage = '';
-      if (!vaccinationForm.skip_reminder) {
+      if (!vaccinationForm.skip_reminder && clinicId) {
         const vaccinationDate = new Date(vaccinationForm.vaccination_date);
-        const nextDueDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
+        // חשב תאריך הבא על פי היסטוריה + interval_days
+        const nextDueDate = await getNextVaccinationDate(petId, vaccinationForm.vaccination_type, selectedVaccine, clinicId) || addDays(vaccinationDate, selectedVaccine.interval_days);
 
         const { error: reminderError } = await supabase
           .from('reminders')
@@ -572,7 +626,7 @@ const ClientProfile = () => {
 
       toast({
         title: 'הצלחה',
-        description: `חיסון ${selectedVaccine.label} נשמר בהצלחה${reminderMessage}`,
+        description: `חיסון ${selectedVaccine.label} נשמר בהצלחה${reminderMessage || ''}`,
       });
 
       // נקה טופס וסגור
@@ -1698,14 +1752,10 @@ const ClientProfile = () => {
                                       </SelectTrigger>
                                       <SelectContent>
                                         {(() => {
-                                          const species = pet.species?.toLowerCase() || 'other';
-                                          const vaccineList = species.includes('כלב') || species.includes('dog')
-                                            ? VACCINATION_TYPES.dog
-                                            : species.includes('חתול') || species.includes('cat')
-                                            ? VACCINATION_TYPES.cat
-                                            : VACCINATION_TYPES.other;
+                                          const petSpecies = pet.species as 'dog' | 'cat' | 'other';
+                                          const vaccineList = getVaccinationsBySpecies(petSpecies);
                                           return vaccineList.map((vaccine) => (
-                                            <SelectItem key={vaccine.value} value={vaccine.value}>
+                                            <SelectItem key={vaccine.name} value={vaccine.name}>
                                               {vaccine.label}
                                             </SelectItem>
                                           ));
@@ -1726,17 +1776,13 @@ const ClientProfile = () => {
 
                                 {/* תצוגת תאריך חיסון הבא */}
                                 {vaccinationForm.vaccination_type && vaccinationForm.vaccination_date && (() => {
-                                  const species = pet.species?.toLowerCase() || 'other';
-                                  const vaccineList = species.includes('כלב') || species.includes('dog')
-                                    ? VACCINATION_TYPES.dog
-                                    : species.includes('חתול') || species.includes('cat')
-                                    ? VACCINATION_TYPES.cat
-                                    : VACCINATION_TYPES.other;
-                                  const selectedVaccine = vaccineList.find(v => v.value === vaccinationForm.vaccination_type);
+                                  const petSpecies = pet.species as 'dog' | 'cat' | 'other';
+                                  const selectedVaccine = getVaccinationByName(vaccinationForm.vaccination_type, petSpecies);
 
-                                  if (selectedVaccine) {
+                                  if (selectedVaccine && clinicId) {
+                                    // Calculate next vaccination date (will be calculated async)
                                     const vaccinationDate = new Date(vaccinationForm.vaccination_date);
-                                    const nextVaccinationDate = addDays(vaccinationDate, selectedVaccine.nextDueDays);
+                                    const defaultNextDate = addDays(vaccinationDate, selectedVaccine.interval_days);
 
                                     return (
                                       <div className="bg-green-100 border border-green-300 rounded-lg p-3 mb-4">
@@ -1744,10 +1790,10 @@ const ClientProfile = () => {
                                           <Calendar className="h-4 w-4" />
                                           <span className="font-medium">חיסון הבא:</span>
                                           <span className="font-bold">
-                                            {format(nextVaccinationDate, 'dd/MM/yyyy', { locale: he })}
+                                            {format(defaultNextDate, 'dd/MM/yyyy', { locale: he })}
                                           </span>
                                           <span className="text-sm text-green-600">
-                                            ({selectedVaccine.nextDueDays === 365 ? 'שנה' : selectedVaccine.nextDueDays === 180 ? '6 חודשים' : `${selectedVaccine.nextDueDays} ימים`})
+                                            ({selectedVaccine.interval_days === 365 ? 'שנה' : selectedVaccine.interval_days === 180 ? '6 חודשים' : `${selectedVaccine.interval_days} ימים`})
                                           </span>
                                         </div>
                                       </div>
@@ -1785,11 +1831,72 @@ const ClientProfile = () => {
 
                             {/* רשימת חיסונים */}
                             {(() => {
+                              // Collect vaccinations from two sources:
+                              // 1. Visits with visit_type starting with 'vaccination:'
                               const vaccinationVisits = visitsByPet[pet.id]?.filter(
                                 (visit) => visit.visit_type?.startsWith('vaccination:')
                               ) || [];
 
-                              if (vaccinationVisits.length === 0 && showVaccinationForm !== pet.id) {
+                              // 2. Vaccinations from visits' vaccinations array
+                              const vaccinationsFromVisits: Array<{ 
+                                id: string; 
+                                type: string; 
+                                date: string; 
+                                visitId: string;
+                                nextDate?: string;
+                                notes?: string;
+                              }> = [];
+                              
+                              visitsByPet[pet.id]?.forEach((visit) => {
+                                if (visit.vaccinations && Array.isArray(visit.vaccinations)) {
+                                  visit.vaccinations.forEach((vacc: any, idx: number) => {
+                                    if (vacc.vaccination_type) {
+                                      const petSpecies = pet.species as 'dog' | 'cat' | 'other';
+                                      const vaccination = getVaccinationByName(vacc.vaccination_type, petSpecies);
+                                      const vaccineLabel = vaccination?.label || vacc.vaccination_type;
+                                      
+                                      vaccinationsFromVisits.push({
+                                        id: `${visit.id}-vacc-${idx}`,
+                                        type: vaccineLabel,
+                                        date: vacc.vaccination_date || visit.visit_date,
+                                        visitId: visit.id,
+                                        nextDate: vacc.next_vaccination_date,
+                                        notes: vacc.notes,
+                                      });
+                                    }
+                                  });
+                                }
+                              });
+
+                              // Combine and sort all vaccinations
+                              const allVaccinations: Array<{
+                                id: string;
+                                type: string;
+                                date: string;
+                                visitId?: string;
+                                nextDate?: string;
+                                notes?: string;
+                              }> = [];
+
+                              // Add vaccination visits
+                              vaccinationVisits.forEach((visit) => {
+                                const parts = visit.visit_type.split(':');
+                                const vaccineName = parts[2] || parts[1] || 'חיסון';
+                                allVaccinations.push({
+                                  id: visit.id,
+                                  type: vaccineName,
+                                  date: visit.visit_date,
+                                  visitId: visit.id,
+                                });
+                              });
+
+                              // Add vaccinations from visits
+                              allVaccinations.push(...vaccinationsFromVisits);
+
+                              // Sort by date (newest first)
+                              allVaccinations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                              if (allVaccinations.length === 0 && showVaccinationForm !== pet.id) {
                                 return (
                                   <p className="text-center text-muted-foreground py-8">
                                     אין רשומות חיסונים
@@ -1797,35 +1904,34 @@ const ClientProfile = () => {
                                 );
                               }
 
-                              const sortedVaccinations = [...vaccinationVisits].sort(
-                                (a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime()
-                              );
-
                               return (
                                 <div className="space-y-3">
-                                  {sortedVaccinations.map((visit) => {
-                                    const parts = visit.visit_type.split(':');
-                                    const vaccineName = parts[2] || parts[1] || 'חיסון';
-
-                                    return (
-                                      <div
-                                        key={visit.id}
-                                        className="flex items-center justify-between p-4 border rounded-lg bg-green-50 border-green-200"
-                                      >
-                                        <div className="text-right">
-                                          <p className="font-medium text-green-800">{vaccineName}</p>
-                                          <p className="text-sm text-muted-foreground">
-                                            {format(new Date(visit.visit_date), 'dd/MM/yyyy', { locale: he })}
+                                  {allVaccinations.map((vacc) => (
+                                    <div
+                                      key={vacc.id}
+                                      className="flex items-center justify-between p-4 border rounded-lg bg-green-50 border-green-200"
+                                    >
+                                      <div className="text-right flex-1">
+                                        <p className="font-medium text-green-800">{vacc.type}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                          {format(new Date(vacc.date), 'dd/MM/yyyy', { locale: he })}
+                                        </p>
+                                        {vacc.nextDate && (
+                                          <p className="text-xs text-green-600 mt-1">
+                                            חיסון הבא: {format(new Date(vacc.nextDate), 'dd/MM/yyyy', { locale: he })}
                                           </p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
-                                            בוצע
-                                          </Badge>
-                                        </div>
+                                        )}
+                                        {vacc.notes && (
+                                          <p className="text-xs text-muted-foreground mt-1">{vacc.notes}</p>
+                                        )}
                                       </div>
-                                    );
-                                  })}
+                                      <div className="flex items-center gap-3">
+                                        <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                                          בוצע
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               );
                             })()}

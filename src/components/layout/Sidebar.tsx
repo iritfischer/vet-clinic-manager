@@ -12,6 +12,7 @@ import {
   DollarSign,
   Settings,
   LogOut,
+  Syringe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'לידים', href: '/leads', icon: UserPlus },
   { name: 'חיות מחמד', href: '/pets', icon: PawPrint },
   { name: 'ביקורים', href: '/visits', icon: FileText },
+  { name: 'חיסונים', href: '/vaccinations', icon: Syringe },
   { name: 'תזכורות', href: '/reminders', icon: Bell },
   { name: 'הודעות WhatsApp', href: '/whatsapp', icon: MessageSquare },
   { name: 'מחירון', href: '/pricing', icon: DollarSign },

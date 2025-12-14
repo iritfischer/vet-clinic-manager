@@ -183,9 +183,10 @@ const Visits = () => {
     if (!clinicId) return;
 
     try {
-      // Extract follow_ups and price_items BEFORE building visitData
+      // Extract follow_ups, price_items, and vaccinations BEFORE building visitData
       const follow_ups = data._follow_ups || data.follow_ups;
       const price_items = data._price_items || data.price_items;
+      const vaccinations = data._vaccinations || [];
 
       // Build clean visitData object with ONLY valid visit table columns
       // DO NOT use spread operator - explicitly list each field
@@ -204,6 +205,7 @@ const Visits = () => {
         diagnoses: data.diagnoses || null,
         treatments: data.treatments || null,
         medications: data.medications || null,
+        vaccinations: data.vaccinations?.length ? data.vaccinations : null,
         recommendations: data.recommendations || null,
         client_summary: data.client_summary || null,
         status: data.status || 'open',
@@ -258,6 +260,7 @@ const Visits = () => {
           diagnoses: visitData.diagnoses,
           treatments: visitData.treatments,
           medications: visitData.medications,
+          vaccinations: visitData.vaccinations,
           recommendations: visitData.recommendations,
           client_summary: visitData.client_summary,
           status: visitData.status,
