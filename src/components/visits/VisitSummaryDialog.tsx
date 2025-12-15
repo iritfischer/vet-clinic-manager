@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Tables } from '@/integrations/supabase/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
+import { useTags } from '@/hooks/useTags';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,9 @@ interface VisitSummaryDialogProps {
 
 export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDialogProps) => {
   const { clinicId } = useClinic();
+  const { getTagLabel: getDiagnosisLabel } = useTags('diagnosis');
+  const { getTagLabel: getTreatmentLabel } = useTags('treatment');
+  const { getTagLabel: getMedicationLabel } = useTags('medication');
   const [clinic, setClinic] = useState<Tables<'clinics'> | null>(null);
   const [loading, setLoading] = useState(false);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
@@ -79,21 +83,21 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
     const initializeSummaryData = async () => {
       const diagnoses: DiagnosisItem[] = Array.isArray(visit.diagnoses)
         ? (visit.diagnoses as any[]).map((d) => ({
-            diagnosis: d.diagnosis || '',
+            diagnosis: getDiagnosisLabel(d.diagnosis || ''),
             notes: d.notes || '',
           }))
         : [];
 
       const treatments: TreatmentItem[] = Array.isArray(visit.treatments)
         ? (visit.treatments as any[]).map((t) => ({
-            treatment: t.treatment || '',
+            treatment: getTreatmentLabel(t.treatment || ''),
             notes: t.notes || '',
           }))
         : [];
 
       const medications: MedicationItem[] = Array.isArray(visit.medications)
         ? (visit.medications as any[]).map((m) => ({
-            medication: m.medication || '',
+            medication: getMedicationLabel(m.medication || ''),
             dosage: m.dosage || '',
             frequency: m.frequency || '',
             duration: m.duration || '',
@@ -167,6 +171,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         petSpecies: visit.pets?.species || 'other',
         petBreed: visit.pets?.breed || undefined,
         petSex: visit.pets?.sex || undefined,
+        petNeuterStatus: visit.pets?.neuter_status || undefined,
         petWeight: visit.pets?.current_weight || undefined,
         petAge: calculateAge(visit.pets?.birth_date || null),
         ownerName,
@@ -186,7 +191,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
     };
 
     initializeSummaryData();
-  }, [visit, clinic]);
+  }, [visit, clinic, getDiagnosisLabel, getTreatmentLabel, getMedicationLabel]);
 
   const handleDownloadPdf = async () => {
     if (!summaryData) return;
