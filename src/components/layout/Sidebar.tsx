@@ -13,6 +13,7 @@ import {
   Settings,
   LogOut,
   Syringe,
+  BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,6 +31,7 @@ const navigation = [
   { name: 'תזכורות', href: '/reminders', icon: Bell },
   { name: 'הודעות WhatsApp', href: '/whatsapp', icon: MessageSquare },
   { name: 'מחירון', href: '/pricing', icon: DollarSign },
+  { name: 'אנליטיקה', href: '/analytics', icon: BarChart3 },
 ];
 
 interface SidebarProps {
