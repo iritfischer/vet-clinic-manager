@@ -83,6 +83,7 @@ const ClientProfile = () => {
   const [vaccinationForm, setVaccinationForm] = useState({
     vaccination_type: '',
     vaccination_date: new Date().toISOString().slice(0, 10),
+    next_vaccination_date: '',
     skip_reminder: false,
   });
 
@@ -605,8 +606,13 @@ const ClientProfile = () => {
       let reminderMessage = '';
       if (!vaccinationForm.skip_reminder && clinicId) {
         const vaccinationDate = new Date(vaccinationForm.vaccination_date);
-        // חשב תאריך הבא על פי היסטוריה + interval_days
-        const nextDueDate = await getNextVaccinationDate(petId, vaccinationForm.vaccination_type, selectedVaccine, clinicId) || addDays(vaccinationDate, selectedVaccine.interval_days);
+        // השתמש בתאריך שהמשתמש הזין, אחרת חשב לפי היסטוריה + interval_days
+        let nextDueDate: Date;
+        if (vaccinationForm.next_vaccination_date) {
+          nextDueDate = new Date(vaccinationForm.next_vaccination_date);
+        } else {
+          nextDueDate = await getNextVaccinationDate(petId, vaccinationForm.vaccination_type, selectedVaccine, clinicId) || addDays(vaccinationDate, selectedVaccine.interval_days);
+        }
 
         const { error: reminderError } = await supabase
           .from('reminders')
@@ -634,6 +640,7 @@ const ClientProfile = () => {
       setVaccinationForm({
         vaccination_type: '',
         vaccination_date: new Date().toISOString().slice(0, 10),
+        next_vaccination_date: '',
         skip_reminder: false,
       });
       fetchClientData();
@@ -1800,26 +1807,35 @@ const ClientProfile = () => {
                                   </div>
                                 </div>
 
-                                {/* תצוגת תאריך חיסון הבא */}
+                                {/* תאריך חיסון הבא - ניתן לעריכה */}
                                 {vaccinationForm.vaccination_type && vaccinationForm.vaccination_date && (() => {
                                   const petSpecies = pet.species as 'dog' | 'cat' | 'other';
                                   const selectedVaccine = getVaccinationByName(vaccinationForm.vaccination_type, petSpecies);
 
                                   if (selectedVaccine && clinicId) {
-                                    // Calculate next vaccination date (will be calculated async)
+                                    // Calculate default next vaccination date
                                     const vaccinationDate = new Date(vaccinationForm.vaccination_date);
                                     const defaultNextDate = addDays(vaccinationDate, selectedVaccine.interval_days);
+                                    const defaultNextDateStr = format(defaultNextDate, 'yyyy-MM-dd');
+
+                                    // Use user-set date or default
+                                    const nextDateValue = vaccinationForm.next_vaccination_date || defaultNextDateStr;
 
                                     return (
-                                      <div className="bg-green-100 border border-green-300 rounded-lg p-3 mb-4">
-                                        <div className="flex items-center gap-2 text-green-800 flex-wrap">
+                                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 space-y-2">
+                                        <Label className="text-sm text-green-800 font-medium flex items-center gap-2">
                                           <Calendar className="h-4 w-4" />
-                                          <span className="font-medium">חיסון הבא:</span>
-                                          <span className="font-bold">
-                                            {format(defaultNextDate, 'dd/MM/yyyy', { locale: he })}
-                                          </span>
-                                          <span className="text-sm text-green-600">
-                                            ({selectedVaccine.interval_days === 365 ? 'שנה' : selectedVaccine.interval_days === 180 ? '6 חודשים' : `${selectedVaccine.interval_days} ימים`})
+                                          תאריך החיסון הבא (ניתן לעריכה)
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            type="date"
+                                            value={nextDateValue}
+                                            onChange={(e) => setVaccinationForm(prev => ({ ...prev, next_vaccination_date: e.target.value }))}
+                                            className="bg-white text-right flex-1"
+                                          />
+                                          <span className="text-xs text-green-600">
+                                            ({selectedVaccine.interval_days} ימים מהחיסון)
                                           </span>
                                         </div>
                                       </div>

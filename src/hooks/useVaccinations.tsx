@@ -73,8 +73,8 @@ export const useVaccinations = (speciesFilter?: 'dog' | 'cat' | 'other' | 'all')
 
   // Get vaccinations by species
   const getVaccinationsBySpecies = useCallback((species: 'dog' | 'cat' | 'other'): Vaccination[] => {
-    return vaccinations.filter(v => 
-      v.is_active && (v.species === species || v.species === 'all')
+    return vaccinations.filter(v =>
+      (v.is_active !== false) && (v.species === species || v.species === 'all')
     );
   }, [vaccinations]);
 
