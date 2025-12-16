@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -87,6 +87,7 @@ const visitSchema = z.object({
     medication: z.string(),
     dosage: z.string().optional(),
     frequency: z.string().optional(),
+    quantity: z.number().optional(),
   })).optional(),
   vaccinations: z.array(z.object({
     vaccination_type: z.string(),
@@ -287,6 +288,9 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   const [itemsNeedingPrice, setItemsNeedingPrice] = useState<Map<string, { type: 'medication' | 'treatment' | 'vaccination'; index: number; name: string; category: string }>>(new Map());
   // Track price inputs for new items
   const [newItemPrices, setNewItemPrices] = useState<Map<string, { price_with_vat: string; price_without_vat: string }>>(new Map());
+  // Track pending price lookups to avoid duplicate requests
+  const pendingLookups = useRef<Set<string>>(new Set());
+
   const medications = watch('medications') || [];
   const treatments = watch('treatments') || [];
   const vaccinations = watch('vaccinations') || [];
@@ -329,8 +333,8 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
 
       if (error) throw error;
 
-      // Refresh price items list
-      await fetchPriceItems();
+      // Update priceItems state directly with the new item (avoid race condition)
+      setPriceItems(prev => [...prev, newItem]);
 
       return newItem.id;
     } catch (error: any) {
@@ -346,35 +350,40 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   // Auto-add medications to pricing when medication name is entered
   useEffect(() => {
     if (!clinicId) return;
-    
+
     medications.forEach(async (med, index) => {
       const medicationName = med.medication?.trim() || '';
       const key = medicationName ? `medication-${index}-${medicationName}` : `medication-${index}-empty`;
-      
+
       if (medicationName) {
-        if (!addedToPricing.has(key)) {
-          const priceItemId = await findPriceItem(medicationName, 'תרופות');
-          if (priceItemId) {
-            // Item exists - add automatically
-            const currentPriceItems = watch('price_items') || [];
-            const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
-            if (!exists) {
-              appendPriceItem({ item_id: priceItemId, quantity: 1 });
+        if (!addedToPricing.has(key) && !pendingLookups.current.has(key)) {
+          pendingLookups.current.add(key);
+          try {
+            const priceItemId = await findPriceItem(medicationName, 'תרופות');
+            if (priceItemId) {
+              // Item exists - add automatically with quantity from medication
+              const currentPriceItems = watch('price_items') || [];
+              const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+              if (!exists) {
+                appendPriceItem({ item_id: priceItemId, quantity: med.quantity || 1 });
+              }
+              setAddedToPricing(prev => new Set(prev).add(key));
+              // Remove from items needing price if it was there
+              setItemsNeedingPrice(prev => {
+                const newMap = new Map(prev);
+                newMap.delete(key);
+                return newMap;
+              });
+            } else {
+              // Item doesn't exist - mark as needing price input
+              setItemsNeedingPrice(prev => {
+                const newMap = new Map(prev);
+                newMap.set(key, { type: 'medication', index, name: medicationName, category: 'תרופות' });
+                return newMap;
+              });
             }
-            setAddedToPricing(prev => new Set(prev).add(key));
-            // Remove from items needing price if it was there
-            setItemsNeedingPrice(prev => {
-              const newMap = new Map(prev);
-              newMap.delete(key);
-              return newMap;
-            });
-          } else {
-            // Item doesn't exist - mark as needing price input
-            setItemsNeedingPrice(prev => {
-              const newMap = new Map(prev);
-              newMap.set(key, { type: 'medication', index, name: medicationName, category: 'תרופות' });
-              return newMap;
-            });
+          } finally {
+            pendingLookups.current.delete(key);
           }
         }
       } else {
@@ -397,35 +406,40 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   // Auto-add treatments to pricing when treatment name is entered
   useEffect(() => {
     if (!clinicId) return;
-    
+
     treatments.forEach(async (treatment, index) => {
       const treatmentName = treatment.treatment?.trim() || '';
       const key = treatmentName ? `treatment-${index}-${treatmentName}` : `treatment-${index}-empty`;
-      
+
       if (treatmentName) {
-        if (!addedToPricing.has(key)) {
-          const priceItemId = await findPriceItem(treatmentName, 'טיפולים');
-          if (priceItemId) {
-            // Item exists - add automatically
-            const currentPriceItems = watch('price_items') || [];
-            const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
-            if (!exists) {
-              appendPriceItem({ item_id: priceItemId, quantity: 1 });
+        // Skip if already processed or pending
+        if (!addedToPricing.has(key) && !pendingLookups.current.has(key)) {
+          pendingLookups.current.add(key);
+          try {
+            const priceItemId = await findPriceItem(treatmentName, 'טיפולים');
+            if (priceItemId) {
+              // Item exists - add automatically
+              const currentPriceItems = watch('price_items') || [];
+              const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
+              if (!exists) {
+                appendPriceItem({ item_id: priceItemId, quantity: 1 });
+              }
+              setAddedToPricing(prev => new Set(prev).add(key));
+              setItemsNeedingPrice(prev => {
+                const newMap = new Map(prev);
+                newMap.delete(key);
+                return newMap;
+              });
+            } else {
+              // Item doesn't exist - mark as needing price input
+              setItemsNeedingPrice(prev => {
+                const newMap = new Map(prev);
+                newMap.set(key, { type: 'treatment', index, name: treatmentName, category: 'טיפולים' });
+                return newMap;
+              });
             }
-            setAddedToPricing(prev => new Set(prev).add(key));
-            // Remove from items needing price if it was there
-            setItemsNeedingPrice(prev => {
-              const newMap = new Map(prev);
-              newMap.delete(key);
-              return newMap;
-            });
-          } else {
-            // Item doesn't exist - mark as needing price input
-            setItemsNeedingPrice(prev => {
-              const newMap = new Map(prev);
-              newMap.set(key, { type: 'treatment', index, name: treatmentName, category: 'טיפולים' });
-              return newMap;
-            });
+          } finally {
+            pendingLookups.current.delete(key);
           }
         }
       } else {
@@ -493,7 +507,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     if (visitType?.includes('vaccination') && vaccinationType && vaccinationType.trim()) {
       const key = `vaccination-${vaccinationType}`;
       if (!addedToPricing.has(key)) {
-        findPriceItem(vaccinationType.trim(), 'vaccination').then(priceItemId => {
+        findPriceItem(vaccinationType.trim(), 'חיסונים').then(priceItemId => {
           if (priceItemId) {
             // Check if already in price_items to avoid duplicates
             const currentPriceItems = watch('price_items') || [];
@@ -582,23 +596,49 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   // Restore draft data if available
   useEffect(() => {
     if (draftDataToRestore && !visit) {
-      Object.entries(draftDataToRestore).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
-          setValue(key as keyof VisitFormData, value as any);
-          
-          // Also update selectedClientId if client_id is being restored
-          if (key === 'client_id' && typeof value === 'string') {
-            setSelectedClientId(value);
-          }
-        }
-      });
+      // Get current form values
+      const currentValues = getValues();
+
+      // Merge draft data with current values (draft takes precedence)
+      const mergedData = {
+        ...currentValues,
+        ...Object.fromEntries(
+          Object.entries(draftDataToRestore)
+            .filter(([_, value]) => value !== null && value !== undefined)
+        )
+      };
+
+      // Single reset call instead of multiple setValues
+      reset(mergedData as VisitFormData, { keepDefaultValues: false });
+
+      // Update selectedClientId if client_id was restored
+      if (draftDataToRestore.client_id && typeof draftDataToRestore.client_id === 'string') {
+        setSelectedClientId(draftDataToRestore.client_id);
+      }
     }
-  }, [draftDataToRestore, visit, setValue]);
+  }, [draftDataToRestore, visit, reset, getValues]);
 
   // Load existing visit data when editing
   useEffect(() => {
     const loadVisitData = async () => {
-      if (!visit) return;
+      if (!visit || !clinicId) return;
+
+      // FIRST: Fetch pets for this client BEFORE setting form values
+      // This ensures species is available for vaccination lookups
+      const { data: clientPets } = await supabase
+        .from('pets')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .eq('client_id', visit.client_id)
+        .eq('status', 'active')
+        .order('name');
+
+      if (clientPets) {
+        setPets(clientPets);
+      }
+
+      // Set selectedClientId early so other effects can use it
+      setSelectedClientId(visit.client_id);
 
       // Parse visit_type for vaccination
       let visitType = visit.visit_type;
@@ -613,18 +653,16 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
 
       // Load price items for this visit
       let priceItemsData: { item_id: string; quantity: number }[] = [];
-      if (clinicId) {
-        const { data: visitPriceItems } = await supabase
-          .from('visit_price_items')
-          .select('*')
-          .eq('visit_id', visit.id);
+      const { data: visitPriceItems } = await supabase
+        .from('visit_price_items')
+        .select('*')
+        .eq('visit_id', visit.id);
 
-        if (visitPriceItems && visitPriceItems.length > 0) {
-          priceItemsData = visitPriceItems.map((item: any) => ({
-            item_id: item.price_item_id,
-            quantity: item.quantity,
-          }));
-        }
+      if (visitPriceItems && visitPriceItems.length > 0) {
+        priceItemsData = visitPriceItems.map((item: any) => ({
+          item_id: item.price_item_id,
+          quantity: item.quantity,
+        }));
       }
 
       // Parse vaccinations array from visit
@@ -641,6 +679,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       }
 
       // Use reset to set all values at once - this keeps isDirty = false
+      // Pets are already loaded at this point
       reset({
         client_id: visit.client_id,
         pet_id: visit.pet_id,
@@ -664,9 +703,6 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
         price_items: priceItemsData,
         follow_ups: [],
       });
-
-      // Set selected client to fetch pets
-      setSelectedClientId(visit.client_id);
     };
 
     loadVisitData();
@@ -765,12 +801,12 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     }
   };
 
-  const onSubmit = (data: VisitFormData) => {
+  const onSubmit = useCallback((data: VisitFormData) => {
     // Validation: ביקור חיסון חייב לכלול פריט תמחור בקטגוריית חיסון
     if (data.visit_type?.includes('vaccination')) {
       const hasVaccinationPriceItem = data.price_items && data.price_items.some(item => {
         const priceItem = priceItems.find(p => p.id === item.item_id);
-        return priceItem?.category === 'vaccination';
+        return priceItem?.category === 'חיסונים';
       });
 
       if (!hasVaccinationPriceItem) {
@@ -818,10 +854,10 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     if (data.vaccinations && data.vaccinations.length > 0 && data.pet_id) {
       const pet = pets.find(p => p.id === data.pet_id);
       const petSpecies = pet?.species as 'dog' | 'cat' | 'other' | undefined;
-      
+
       for (const vacc of data.vaccinations) {
         if (!vacc.vaccination_type) continue;
-        
+
         const vaccination = petSpecies ? getVaccinationByName(vacc.vaccination_type, petSpecies) : undefined;
         if (!vaccination || !('interval_days' in vaccination)) continue;
 
@@ -848,7 +884,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       const petSpecies = pet?.species as 'dog' | 'cat' | 'other' | undefined;
       const vaccination = petSpecies ? getVaccinationByName(data.vaccination_type, petSpecies) : undefined;
       const vaccinationConfig = vaccination;
-      
+
       // אם יש תאריך מוזן ידנית, השתמש בו, אחרת חשב אוטומטית
       let nextDueDate: Date;
       if (data.next_vaccination_date) {
@@ -878,7 +914,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       _price_items: data.price_items,
       _vaccinations: data.vaccinations || [] // Pass vaccinations separately for processing
     });
-  };
+  }, [priceItems, pets, getVaccinationByName, nextVaccinationDate, toast, onSave]);
 
   // Set up submit ref for external triggering (after onSubmit is defined)
   useEffect(() => {
@@ -990,7 +1026,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                 <Label>סוג ביקור *</Label>
                 <TagInput
                   category="visit_type"
-                  value={watch('visit_type')?.split(',').filter(Boolean) || []}
+                  value={watch('visit_type')?.split(/,\s*/).filter(Boolean) || []}
                   onChange={(values) => {
                     const valueStr = Array.isArray(values) ? values.join(',') : values;
                     setValue('visit_type', valueStr, { shouldValidate: true });
@@ -1111,8 +1147,8 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                 <Label>תלונה עיקרית</Label>
                 <TagInput
                   category="chief_complaint"
-                  value={watch('chief_complaint')?.split(',').filter(Boolean) || []}
-                  onChange={(values) => setValue('chief_complaint', Array.isArray(values) ? values.join(', ') : values)}
+                  value={watch('chief_complaint')?.split(/,\s*/).filter(Boolean) || []}
+                  onChange={(values) => setValue('chief_complaint', Array.isArray(values) ? values.join(',') : values)}
                   placeholder="בחר או הקלד תלונה עיקרית"
                   allowCreate={true}
                   multiple={true}
@@ -1363,7 +1399,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                         <Trash2 className="h-4 w-4" />
                       </Button>
                       <div className="flex-1 space-y-2">
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                           <TagInput
                             category="medication"
                             value={medicationName}
@@ -1373,6 +1409,13 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                           />
                           <Input {...register(`medications.${index}.dosage`)} className="text-right" placeholder="מינון" />
                           <Input {...register(`medications.${index}.frequency`)} className="text-right" placeholder="תדירות" />
+                          <Input
+                            type="number"
+                            min="1"
+                            {...register(`medications.${index}.quantity`, { valueAsNumber: true })}
+                            className="text-right"
+                            placeholder="כמות"
+                          />
                         </div>
                         {needsPrice && (
                           <div className="bg-yellow-50 border border-yellow-200 rounded p-2 space-y-2">
@@ -1436,7 +1479,9 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                                     const currentPriceItems = watch('price_items') || [];
                                     const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);
                                     if (!exists) {
-                                      appendPriceItem({ item_id: priceItemId, quantity: 1 });
+                                      // Use quantity from the medication entry
+                                      const medQuantity = medications[index]?.quantity || 1;
+                                      appendPriceItem({ item_id: priceItemId, quantity: medQuantity });
                                     }
                                     setAddedToPricing(prev => new Set(prev).add(key));
                                     setItemsNeedingPrice(prev => {
@@ -1531,11 +1576,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                                     const priceWithoutVat = vacc.price_without_vat || (priceWithVat / 1.17);
                                     
                                     // First try to find existing price item
-                                    let priceItemId = await findPriceItem(vaccLabel, 'vaccination');
-                                    
+                                    let priceItemId = await findPriceItem(vaccLabel, 'חיסונים');
+
                                     // If not found, create new price item
                                     if (!priceItemId) {
-                                      priceItemId = await createAndAddPriceItem(vaccLabel, 'vaccination', priceWithVat, priceWithoutVat);
+                                      priceItemId = await createAndAddPriceItem(vaccLabel, 'חיסונים', priceWithVat, priceWithoutVat);
                                     }
                                     
                                     // Add to price items if found/created
@@ -1564,11 +1609,11 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                                     }
                                   } else {
                                     // No pricing defined - check if price item exists, if not show price input
-                                    const priceItemId = await findPriceItem(vacc.label, 'vaccination');
+                                    const priceItemId = await findPriceItem(vacc.label, 'חיסונים');
                                     if (!priceItemId) {
                                       setItemsNeedingPrice(prev => {
                                         const newMap = new Map(prev);
-                                        newMap.set(newKey, { type: 'vaccination', index, name: vacc.label, category: 'vaccination' });
+                                        newMap.set(newKey, { type: 'vaccination', index, name: vacc.label, category: 'חיסונים' });
                                         return newMap;
                                       });
                                     } else {
@@ -1703,7 +1748,7 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
                                 if (priceWithVat > 0 && vaccinationType) {
                                   const vacc = petSpecies ? getVaccinationByName(vaccinationType, petSpecies) : undefined;
                                   const vaccLabel = (vacc && 'label' in vacc) ? vacc.label : vaccinationType;
-                                  const priceItemId = await createAndAddPriceItem(vaccLabel, 'vaccination', priceWithVat, priceWithoutVat);
+                                  const priceItemId = await createAndAddPriceItem(vaccLabel, 'חיסונים', priceWithVat, priceWithoutVat);
                                   if (priceItemId) {
                                     const currentPriceItems = watch('price_items') || [];
                                     const exists = currentPriceItems.some(pi => pi.item_id === priceItemId);

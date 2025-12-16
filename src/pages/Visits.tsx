@@ -222,12 +222,26 @@ const Visits = () => {
         // Update existing visit (either editing or saving a draft)
         const targetVisitId = editingVisit?.id || draftVisitId!;
 
+        // Debug log: what data is being saved
+        console.log('[Visits.handleSave] Updating visit:', {
+          targetVisitId,
+          historyFields: {
+            general_history: visitData.general_history,
+            medical_history: visitData.medical_history,
+            current_history: visitData.current_history,
+          },
+        });
+
         const { error } = await supabase
           .from('visits')
           .update(visitData)
           .eq('id', targetVisitId);
 
-        if (error) throw error;
+        if (error) {
+          console.error('[Visits.handleSave] Update error:', error);
+          throw error;
+        }
+        console.log('[Visits.handleSave] Update successful');
         visitId = targetVisitId;
 
         // Delete existing price items

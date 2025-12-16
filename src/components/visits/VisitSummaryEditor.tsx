@@ -45,10 +45,10 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
   };
 
   const addMedication = () => {
-    updateField('medications', [...data.medications, { medication: '', dosage: '', frequency: '', duration: '' }]);
+    updateField('medications', [...data.medications, { medication: '', dosage: '', frequency: '', duration: '', quantity: 1 }]);
   };
 
-  const updateMedication = (idx: number, field: keyof MedicationItem, value: string) => {
+  const updateMedication = (idx: number, field: keyof MedicationItem, value: string | number) => {
     const updated = [...data.medications];
     updated[idx] = { ...updated[idx], [field]: value };
     updateField('medications', updated);
@@ -221,7 +221,7 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
                   value={m.medication}
                   onChange={(e) => updateMedication(idx, 'medication', e.target.value)}
                 />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <Input
                     placeholder="מינון"
                     value={m.dosage || ''}
@@ -236,6 +236,13 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
                     placeholder="משך"
                     value={m.duration || ''}
                     onChange={(e) => updateMedication(idx, 'duration', e.target.value)}
+                  />
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="כמות"
+                    value={m.quantity || ''}
+                    onChange={(e) => updateMedication(idx, 'quantity', parseInt(e.target.value) || 1)}
                   />
                 </div>
               </div>

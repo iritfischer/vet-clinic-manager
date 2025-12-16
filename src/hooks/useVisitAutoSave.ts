@@ -78,6 +78,7 @@ const AUTO_SAVE_FIELDS = [
   'diagnoses',
   'treatments',
   'medications',
+  'vaccinations',
   'recommendations',
   'client_summary',
   'status',
@@ -133,19 +134,34 @@ export const useVisitAutoSave = ({
     try {
       isSavingRef.current = true;
 
+      // Debug log: what data is being saved
+      console.log('[AutoSave] Saving to database:', {
+        visitId,
+        fields: Object.keys(updateData),
+        hasHistory: {
+          general_history: !!updateData.general_history,
+          medical_history: !!updateData.medical_history,
+          current_history: !!updateData.current_history,
+        },
+      });
+
       const { error } = await supabase
         .from('visits')
         .update(updateData)
         .eq('id', visitId);
 
-      if (!error) {
+      if (error) {
+        // Log the error for debugging
+        console.error('[AutoSave] Database save error:', error);
+      } else {
+        console.log('[AutoSave] Database save successful');
         lastSavedDataRef.current = dataString;
         // Clear localStorage backup after successful DB save
         clearDraftFromLocalStorage();
       }
-      // Silent failure - no toast for auto-save errors
-    } catch {
-      // Silent failure - localStorage backup still exists
+    } catch (err) {
+      // Log the error for debugging
+      console.error('[AutoSave] Exception during save:', err);
     } finally {
       isSavingRef.current = false;
     }

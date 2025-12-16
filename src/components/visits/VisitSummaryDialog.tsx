@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Download, Send, Eye, Edit } from 'lucide-react';
+import { Loader2, Download, Send, Eye, Edit, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInYears, differenceInMonths } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -37,7 +37,73 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('preview');
   const [summaryData, setSummaryData] = useState<VisitSummaryData | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
+
+  // Wrapper for setSummaryData that tracks dirty state
+  const handleSummaryDataChange = (data: VisitSummaryData) => {
+    setSummaryData(data);
+    setIsDirty(true);
+  };
+
+  // Save changes back to the visit
+  const saveChangesToVisit = async () => {
+    if (!visit || !summaryData) return false;
+
+    setIsSaving(true);
+    try {
+      // Transform summaryData back to visit format
+      const updateData = {
+        general_history: summaryData.generalHistory || null,
+        medical_history: summaryData.medicalHistory || null,
+        current_history: summaryData.currentHistory || null,
+        physical_exam: summaryData.physicalExam || null,
+        diagnoses: summaryData.diagnoses.length > 0 ? summaryData.diagnoses : null,
+        treatments: summaryData.treatments.length > 0 ? summaryData.treatments : null,
+        medications: summaryData.medications.length > 0 ? summaryData.medications : null,
+        recommendations: summaryData.recommendations || null,
+        client_summary: summaryData.notesToOwner || null,
+      };
+
+      console.log('[VisitSummaryDialog] Saving changes to visit:', { visitId: visit.id, updateData });
+
+      const { error } = await supabase
+        .from('visits')
+        .update(updateData)
+        .eq('id', visit.id);
+
+      if (error) {
+        console.error('[VisitSummaryDialog] Save error:', error);
+        toast.error('שגיאה בשמירת השינויים');
+        return false;
+      }
+
+      console.log('[VisitSummaryDialog] Save successful');
+      toast.success('השינויים נשמרו בהצלחה');
+      setIsDirty(false);
+      return true;
+    } catch (err) {
+      console.error('[VisitSummaryDialog] Exception during save:', err);
+      toast.error('שגיאה בשמירת השינויים');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle dialog close with dirty check
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && isDirty) {
+      if (!confirm('יש שינויים שלא נשמרו. האם לצאת בכל זאת?')) {
+        return;
+      }
+    }
+    if (!newOpen) {
+      setIsDirty(false);
+    }
+    onOpenChange(newOpen);
+  };
 
   // Fetch clinic data
   useEffect(() => {
@@ -101,6 +167,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
             dosage: m.dosage || '',
             frequency: m.frequency || '',
             duration: m.duration || '',
+            quantity: m.quantity || 1,
           }))
         : [];
 
@@ -219,6 +286,15 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
       return;
     }
 
+    // Auto-save before sending if there are unsaved changes
+    if (isDirty) {
+      const saved = await saveChangesToVisit();
+      if (!saved) {
+        toast.error('לא ניתן לשלוח - שגיאה בשמירת השינויים');
+        return;
+      }
+    }
+
     setSendingWhatsApp(true);
     try {
       const result = await openWhatsAppWithPdfFromData(
@@ -250,7 +326,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" dir="rtl">
         <DialogHeader>
           <DialogTitle className="text-right">סיכום ביקור - {summaryData.petName}</DialogTitle>
@@ -278,13 +354,27 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
             </TabsContent>
 
             <TabsContent value="edit" className="mt-0 h-full">
-              <VisitSummaryEditor data={summaryData} onChange={setSummaryData} />
+              <VisitSummaryEditor data={summaryData} onChange={handleSummaryDataChange} />
             </TabsContent>
           </div>
         </Tabs>
 
         {/* Action Buttons */}
         <div className="flex gap-3 pt-4 border-t">
+          {isDirty && (
+            <Button
+              onClick={saveChangesToVisit}
+              disabled={isSaving}
+              variant="outline"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 ml-2" />
+              )}
+              שמור שינויים
+            </Button>
+          )}
           <Button
             onClick={handleDownloadPdf}
             disabled={loading}

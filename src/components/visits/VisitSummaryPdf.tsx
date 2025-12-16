@@ -38,6 +38,11 @@ const sexLabels: Record<string, string> = {
   unknown: 'לא ידוע',
 };
 
+const neuterLabels: Record<string, string> = {
+  neutered: 'מעוקר/מסורס',
+  intact: 'לא מעוקר',
+};
+
 const createStyles = (primaryColor: string) => StyleSheet.create({
   page: {
     fontFamily: 'NotoSansHebrew',
@@ -289,7 +294,7 @@ export const VisitSummaryPdf = ({ data }: VisitSummaryPdfProps) => {
         </View>
 
         {/* Title with pet name and date */}
-        <Text style={styles.title}>סיכום ביקור - {data.petName} - {data.visitDate}</Text>
+        <Text style={styles.title}>סיכום ביקור{'\u200F'} - {data.petName}{'\u200F'} - {data.visitDate}</Text>
 
         {/* Pet Info */}
         <View style={styles.petInfoBox}>
@@ -308,6 +313,12 @@ export const VisitSummaryPdf = ({ data }: VisitSummaryPdfProps) => {
               <Text style={styles.petDetail}>
                 <Text style={styles.label}>מין: </Text>
                 {sexLabels[data.petSex] || data.petSex}
+              </Text>
+            )}
+            {data.petNeuterStatus && data.petNeuterStatus !== 'none' && (
+              <Text style={styles.petDetail}>
+                <Text style={styles.label}>עיקור: </Text>
+                {neuterLabels[data.petNeuterStatus] || 'לא ידוע'}
               </Text>
             )}
             {data.petWeight && (
@@ -378,7 +389,7 @@ export const VisitSummaryPdf = ({ data }: VisitSummaryPdfProps) => {
                 <Text style={styles.itemTitle}>אבחנות:</Text>
                 {data.diagnoses.map((d, idx) => (
                   <View key={idx}>
-                    <Text style={styles.sectionContent}>{d.diagnosis} -</Text>
+                    <Text style={styles.sectionContent}>{d.diagnosis}{d.notes ? ':' : ''}</Text>
                     {d.notes && <Text style={styles.itemNotes}>{d.notes}</Text>}
                   </View>
                 ))}
@@ -391,7 +402,7 @@ export const VisitSummaryPdf = ({ data }: VisitSummaryPdfProps) => {
                 <Text style={styles.itemTitle}>טיפולים שבוצעו:</Text>
                 {data.treatments.map((t, idx) => (
                   <View key={idx}>
-                    <Text style={styles.sectionContent}>{t.treatment} -</Text>
+                    <Text style={styles.sectionContent}>{t.treatment}{t.notes ? ':' : ''}</Text>
                     {t.notes && <Text style={styles.itemNotes}>{t.notes}</Text>}
                   </View>
                 ))}
@@ -404,10 +415,14 @@ export const VisitSummaryPdf = ({ data }: VisitSummaryPdfProps) => {
                 <Text style={styles.itemTitle}>תרופות:</Text>
                 {data.medications.map((m, idx) => (
                   <View key={idx} style={styles.medicationItem}>
-                    <Text style={styles.sectionContent}>{m.medication} -</Text>
+                    <Text style={styles.medicationName}>
+                      {m.medication}
+                      {m.quantity && m.quantity > 1 ? ` (x${m.quantity})` : ''}
+                    </Text>
                     {m.dosage && <Text style={styles.medicationDetail}>מינון: {m.dosage}</Text>}
                     {m.frequency && <Text style={styles.medicationDetail}>תדירות: {m.frequency}</Text>}
                     {m.duration && <Text style={styles.medicationDetail}>משך: {m.duration}</Text>}
+                    {m.quantity && <Text style={styles.medicationDetail}>כמות: {m.quantity}</Text>}
                   </View>
                 ))}
               </View>

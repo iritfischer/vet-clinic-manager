@@ -28,6 +28,11 @@ const sexLabels: Record<string, string> = {
   unknown: 'לא ידוע',
 };
 
+const neuterLabels: Record<string, string> = {
+  neutered: 'מעוקר/מסורס',
+  intact: 'לא מעוקר',
+};
+
 export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
   // Use dynamic primary color or default
   const primaryColor = data.primaryColor || '#E8833A';
@@ -91,7 +96,7 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
               className="text-2xl font-bold text-gray-800 border-b-2 pb-2 inline-block px-8"
               style={{ borderColor: primaryColor }}
             >
-              סיכום ביקור - {data.petName} - {data.visitDate}
+              סיכום ביקור{'\u200F'} - {data.petName}{'\u200F'} - {data.visitDate}
             </h2>
           </div>
         </div>
@@ -110,6 +115,9 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
             <div><span className="font-semibold">סוג:</span> {speciesLabels[data.petSpecies] || data.petSpecies}</div>
             {data.petBreed && <div><span className="font-semibold">גזע:</span> {data.petBreed}</div>}
             {data.petSex && <div><span className="font-semibold">מין:</span> {sexLabels[data.petSex] || data.petSex}</div>}
+            {data.petNeuterStatus && data.petNeuterStatus !== 'none' && (
+              <div><span className="font-semibold">עיקור:</span> {neuterLabels[data.petNeuterStatus] || 'לא ידוע'}</div>
+            )}
             {data.petWeight && <div><span className="font-semibold">משקל:</span> {data.petWeight} ק"ג</div>}
             {data.petAge && <div><span className="font-semibold">גיל:</span> {data.petAge}</div>}
           </div>
@@ -175,7 +183,7 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
                   <p className="font-bold text-gray-800 mb-2">אבחנות:</p>
                   {data.diagnoses.map((d, idx) => (
                     <div key={idx} className="text-lg">
-                      <p className="text-gray-700">{d.diagnosis} -</p>
+                      <p className="text-gray-700">{d.diagnosis}{d.notes ? ':' : ''}</p>
                       {d.notes && <p className="text-gray-500 mr-4">{d.notes}</p>}
                     </div>
                   ))}
@@ -188,7 +196,7 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
                   <p className="font-bold text-gray-800 mb-2">טיפולים שבוצעו:</p>
                   {data.treatments.map((t, idx) => (
                     <div key={idx} className="text-lg">
-                      <p className="text-gray-700">{t.treatment} -</p>
+                      <p className="text-gray-700">{t.treatment}{t.notes ? ':' : ''}</p>
                       {t.notes && <p className="text-gray-500 mr-4">{t.notes}</p>}
                     </div>
                   ))}
@@ -201,11 +209,15 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
                   <p className="font-bold text-gray-800 mb-2">תרופות:</p>
                   {data.medications.map((m, idx) => (
                     <div key={idx} className="text-lg mb-2">
-                      <p className="text-gray-700">{m.medication} -</p>
+                      <p className="text-gray-700 font-medium">
+                        {m.medication}
+                        {m.quantity && m.quantity > 1 && <span className="text-gray-500 font-normal"> (x{m.quantity})</span>}
+                      </p>
                       <div className="text-gray-500 mr-4">
                         {m.dosage && <p>מינון: {m.dosage}</p>}
                         {m.frequency && <p>תדירות: {m.frequency}</p>}
                         {m.duration && <p>משך: {m.duration}</p>}
+                        {m.quantity && <p>כמות: {m.quantity}</p>}
                       </div>
                     </div>
                   ))}

@@ -15,6 +15,7 @@ export interface MedicationItem {
   dosage?: string;
   frequency?: string;
   duration?: string;
+  quantity?: number;
 }
 
 export interface ChargeItem {
@@ -45,6 +46,7 @@ export interface VisitSummaryData {
   petSpecies: string;
   petBreed?: string;
   petSex?: string;
+  petNeuterStatus?: string;
   petWeight?: number;
   petAge?: string;
 
