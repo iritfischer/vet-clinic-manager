@@ -1,6 +1,6 @@
 import { VisitSummaryData } from '@/lib/visitSummaryTypes';
 import { Separator } from '@/components/ui/separator';
-import { Calendar, Phone, MapPin, Pill, Stethoscope, Heart, FileText, Clock, Receipt, Globe, ClipboardList, History } from 'lucide-react';
+import { Calendar, Phone, MapPin, Pill, Stethoscope, Heart, FileText, Clock, Receipt, Globe, ClipboardList, History, Syringe } from 'lucide-react';
 
 interface VisitSummaryPreviewProps {
   data: VisitSummaryData;
@@ -223,6 +223,27 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* 5.5. חיסונים */}
+        {data.vaccinations && data.vaccinations.length > 0 && (
+          <div data-pdf-section="true" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2 border-b-2 border-gray-300 pb-2">
+              <Syringe className="h-6 w-6" style={{ color: primaryColor }} />
+              <h3 className="font-bold text-xl text-gray-800">חיסונים</h3>
+            </div>
+            <div className="space-y-2 pt-2">
+              {data.vaccinations.map((v, idx) => (
+                <div key={idx} className="text-lg">
+                  <p className="text-gray-700 font-medium">{v.vaccination_type}</p>
+                  <div className="text-gray-500 mr-4 text-base">
+                    {v.vaccination_date && <p>תאריך חיסון: {v.vaccination_date}</p>}
+                    {v.next_vaccination_date && <p>חיסון הבא: {v.next_vaccination_date}</p>}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -430,6 +430,26 @@ export const VisitSummaryPdf = ({ data }: VisitSummaryPdfProps) => {
           </View>
         )}
 
+        {/* 5.5 חיסונים */}
+        {data.vaccinations && data.vaccinations.length > 0 && (
+          <View style={styles.section} wrap={false}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>חיסונים</Text>
+            </View>
+            {data.vaccinations.map((v, idx) => (
+              <View key={idx} style={{ marginBottom: 6 }}>
+                <Text style={styles.medicationName}>{v.vaccination_type}</Text>
+                {v.vaccination_date && (
+                  <Text style={styles.medicationDetail}>תאריך חיסון: {v.vaccination_date}</Text>
+                )}
+                {v.next_vaccination_date && (
+                  <Text style={styles.medicationDetail}>חיסון הבא: {v.next_vaccination_date}</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* 6. סיכום לבעלים */}
         {data.notesToOwner && (
           <View style={styles.section} wrap={false}>

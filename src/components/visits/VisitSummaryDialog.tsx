@@ -18,7 +18,7 @@ import { he } from 'date-fns/locale';
 
 import { VisitSummaryPreview } from './VisitSummaryPreview';
 import { VisitSummaryEditor } from './VisitSummaryEditor';
-import { VisitSummaryData, VisitWithRelations, DiagnosisItem, TreatmentItem, MedicationItem, ChargeItem } from '@/lib/visitSummaryTypes';
+import { VisitSummaryData, VisitWithRelations, DiagnosisItem, TreatmentItem, MedicationItem, ChargeItem, VaccinationItem } from '@/lib/visitSummaryTypes';
 import { downloadVisitPdfFromData, openWhatsAppWithPdfFromData } from '@/lib/generateVisitPdf';
 
 interface VisitSummaryDialogProps {
@@ -54,6 +54,13 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
     setIsSaving(true);
     try {
       // Transform summaryData back to visit format
+      // Convert formatted dates back to ISO format for vaccinations
+      const vaccinationsForDb = summaryData.vaccinations?.map(v => ({
+        vaccination_type: v.vaccination_type,
+        vaccination_date: v.vaccination_date ? v.vaccination_date.split('/').reverse().join('-') : null,
+        next_vaccination_date: v.next_vaccination_date ? v.next_vaccination_date.split('/').reverse().join('-') : null,
+      }));
+
       const updateData = {
         general_history: summaryData.generalHistory || null,
         medical_history: summaryData.medicalHistory || null,
@@ -62,6 +69,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         diagnoses: summaryData.diagnoses.length > 0 ? summaryData.diagnoses : null,
         treatments: summaryData.treatments.length > 0 ? summaryData.treatments : null,
         medications: summaryData.medications.length > 0 ? summaryData.medications : null,
+        vaccinations: vaccinationsForDb && vaccinationsForDb.length > 0 ? vaccinationsForDb : null,
         recommendations: summaryData.recommendations || null,
         client_summary: summaryData.notesToOwner || null,
       };
@@ -171,6 +179,14 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
           }))
         : [];
 
+      const vaccinations: VaccinationItem[] = Array.isArray(visit.vaccinations)
+        ? (visit.vaccinations as any[]).map((v) => ({
+            vaccination_type: v.vaccination_type || '',
+            vaccination_date: v.vaccination_date ? format(new Date(v.vaccination_date), 'dd/MM/yyyy', { locale: he }) : '',
+            next_vaccination_date: v.next_vaccination_date ? format(new Date(v.next_vaccination_date), 'dd/MM/yyyy', { locale: he }) : undefined,
+          }))
+        : [];
+
       const ownerName = visit.clients
         ? `${visit.clients.first_name} ${visit.clients.last_name}`
         : 'לא ידוע';
@@ -254,6 +270,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         notesToOwner: visit.client_summary || undefined,
         charges,
         totalAmount,
+        vaccinations,
       });
     };
 

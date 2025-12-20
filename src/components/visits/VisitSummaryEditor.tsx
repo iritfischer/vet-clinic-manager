@@ -1,4 +1,4 @@
-import { VisitSummaryData, DiagnosisItem, TreatmentItem, MedicationItem } from '@/lib/visitSummaryTypes';
+import { VisitSummaryData, DiagnosisItem, TreatmentItem, MedicationItem, VaccinationItem } from '@/lib/visitSummaryTypes';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,20 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
 
   const removeMedication = (idx: number) => {
     updateField('medications', data.medications.filter((_, i) => i !== idx));
+  };
+
+  const addVaccination = () => {
+    updateField('vaccinations', [...(data.vaccinations || []), { vaccination_type: '', vaccination_date: '', next_vaccination_date: '' }]);
+  };
+
+  const updateVaccination = (idx: number, field: keyof VaccinationItem, value: string) => {
+    const updated = [...(data.vaccinations || [])];
+    updated[idx] = { ...updated[idx], [field]: value };
+    updateField('vaccinations', updated);
+  };
+
+  const removeVaccination = (idx: number) => {
+    updateField('vaccinations', (data.vaccinations || []).filter((_, i) => i !== idx));
   };
 
   return (
@@ -259,6 +273,62 @@ export const VisitSummaryEditor = ({ data, onChange }: VisitSummaryEditorProps) 
           ))}
           {data.medications.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-2">אין תרופות</p>
+          )}
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Vaccinations */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <Label className="text-base font-semibold">חיסונים</Label>
+          <Button type="button" variant="outline" size="sm" onClick={addVaccination}>
+            <Plus className="h-4 w-4 ml-1" />
+            הוסף
+          </Button>
+        </div>
+        <div className="space-y-3">
+          {(data.vaccinations || []).map((v, idx) => (
+            <div key={idx} className="flex gap-2 items-start border-b border-gray-200 pb-3">
+              <div className="flex-1 space-y-2">
+                <Input
+                  placeholder="סוג החיסון"
+                  value={v.vaccination_type}
+                  onChange={(e) => updateVaccination(idx, 'vaccination_type', e.target.value)}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-gray-500">תאריך חיסון</Label>
+                    <Input
+                      placeholder="dd/mm/yyyy"
+                      value={v.vaccination_date || ''}
+                      onChange={(e) => updateVaccination(idx, 'vaccination_date', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">תאריך חיסון הבא</Label>
+                    <Input
+                      placeholder="dd/mm/yyyy"
+                      value={v.next_vaccination_date || ''}
+                      onChange={(e) => updateVaccination(idx, 'next_vaccination_date', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeVaccination(idx)}
+                className="text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          {(!data.vaccinations || data.vaccinations.length === 0) && (
+            <p className="text-sm text-muted-foreground text-center py-2">אין חיסונים</p>
           )}
         </div>
       </div>

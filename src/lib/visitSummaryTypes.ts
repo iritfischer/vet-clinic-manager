@@ -25,6 +25,12 @@ export interface ChargeItem {
   total: number;
 }
 
+export interface VaccinationItem {
+  vaccination_type: string;
+  vaccination_date: string;
+  next_vaccination_date?: string;
+}
+
 export interface VisitSummaryData {
   // Clinic info
   clinicName: string;
@@ -75,6 +81,9 @@ export interface VisitSummaryData {
   // Charges
   charges?: ChargeItem[];
   totalAmount?: number;
+
+  // Vaccinations
+  vaccinations?: VaccinationItem[];
 }
 
 export type VisitWithRelations = Tables<'visits'> & {
