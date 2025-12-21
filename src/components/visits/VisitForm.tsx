@@ -802,23 +802,6 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
   };
 
   const onSubmit = useCallback((data: VisitFormData) => {
-    // Validation: ביקור חיסון חייב לכלול פריט תמחור בקטגוריית חיסון
-    if (data.visit_type?.includes('vaccination')) {
-      const hasVaccinationPriceItem = data.price_items && data.price_items.some(item => {
-        const priceItem = priceItems.find(p => p.id === item.item_id);
-        return priceItem?.category === 'חיסונים';
-      });
-
-      if (!hasVaccinationPriceItem) {
-        toast({
-          title: 'שגיאת אימות',
-          description: 'ביקור חיסון חייב לכלול לפחות פריט תמחור אחד בקטגוריית חיסון',
-          variant: 'destructive',
-        });
-        return;
-      }
-    }
-
     // בנה את visit_type - אם יש חיסון ברשימה, הוסף את סוג החיסון
     let finalVisitType = data.visit_type;
     if (data.visit_type?.includes('vaccination') && data.vaccination_type) {
