@@ -48,12 +48,14 @@ export function calculateNextVaccinationDate(
 
 /**
  * קבל את תאריך החיסון הבא לחיית מחמד וחיסון מסוים
+ * @param currentVaccinationDate - תאריך החיסון הנוכחי שמבוצע (אופציונלי). אם אין היסטוריה, יחושב מתאריך זה
  */
 export async function getNextVaccinationDate(
   petId: string,
   vaccinationType: string,
   vaccination: Vaccination | undefined,
-  clinicId: string
+  clinicId: string,
+  currentVaccinationDate?: Date
 ): Promise<Date | null> {
   if (!vaccination) return null;
 
@@ -66,8 +68,9 @@ export async function getNextVaccinationDate(
     return calculateNextVaccinationDate(lastDate, vaccination.interval_days);
   }
 
-  // אם אין היסטוריה, שנה מהתאריך הנוכחי
-  return calculateNextVaccinationDate(new Date(), vaccination.interval_days);
+  // אם אין היסטוריה, חשב מתאריך החיסון הנוכחי (אם סופק) או מהיום
+  const baseDate = currentVaccinationDate || new Date();
+  return calculateNextVaccinationDate(baseDate, vaccination.interval_days);
 }
 
 /**

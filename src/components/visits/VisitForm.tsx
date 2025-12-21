@@ -487,7 +487,8 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
       }
 
       try {
-        const nextDate = await getNextVaccinationDate(petId, vaccinationType, vaccination, clinicId);
+        const vaccDate = vaccinationDate ? new Date(vaccinationDate) : new Date();
+        const nextDate = await getNextVaccinationDate(petId, vaccinationType, vaccination, clinicId, vaccDate);
         setNextVaccinationDate(nextDate);
         // Set the calculated date in the form if not manually set
         if (!nextVaccinationDateForm && nextDate) {

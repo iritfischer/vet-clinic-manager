@@ -620,7 +620,7 @@ const ClientProfile = () => {
         if (vaccinationForm.next_vaccination_date) {
           nextDueDate = new Date(vaccinationForm.next_vaccination_date);
         } else {
-          nextDueDate = await getNextVaccinationDate(petId, vaccinationForm.vaccination_type, selectedVaccine, clinicId) || addDays(vaccinationDate, selectedVaccine.interval_days);
+          nextDueDate = await getNextVaccinationDate(petId, vaccinationForm.vaccination_type, selectedVaccine, clinicId, vaccinationDate) || addDays(vaccinationDate, selectedVaccine.interval_days);
         }
 
         const { error: reminderError } = await supabase
