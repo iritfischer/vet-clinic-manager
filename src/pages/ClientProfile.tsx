@@ -995,13 +995,14 @@ const ClientProfile = () => {
 
                       {/* סטטוס עיקור */}
                       <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">עיקור</span>
+                        <span className="text-xs text-muted-foreground">
+                          {selectedPet.sex === 'female' ? 'עיקור' : 'סירוס'}
+                        </span>
                         <Badge
                           variant="outline"
-                          className={`text-xs ${selectedPet.neuter_status === 'neutered' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white'}`}
+                          className={`text-xs ${selectedPet.neuter_status === 'מעוקרת' || selectedPet.neuter_status === 'מסורס' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white'}`}
                         >
-                          {selectedPet.neuter_status === 'neutered' ? 'מעוקר/מסורס' :
-                           selectedPet.neuter_status === 'intact' ? 'לא מעוקר' : 'לא ידוע'}
+                          {selectedPet.neuter_status || 'לא ידוע'}
                         </Badge>
                       </div>
 
@@ -1225,7 +1226,7 @@ const ClientProfile = () => {
 
                                   const formData = new FormData(form);
                                   const sexValue = formData.get(`sex-${pet.id}`) as string;
-                                  const neuterCheckbox = form.querySelector(`input[name="neuter-${pet.id}"]`) as HTMLInputElement;
+                                  const neuterValue = formData.get(`neuter-${pet.id}`) as string;
 
                                   // Calculate birth_date from age years and months
                                   const ageYears = parseInt(formData.get('age_years') as string) || 0;
@@ -1248,7 +1249,7 @@ const ClientProfile = () => {
                                     birth_date: birthDate,
                                     microchip_number: formData.get('microchip_number') as string || null,
                                     license_number: formData.get('license_number') as string || null,
-                                    neuter_status: neuterCheckbox?.checked ? 'neutered' : (pet.neuter_status === 'neutered' ? 'neutered' : 'intact'),
+                                    neuter_status: neuterValue || null,
                                   };
 
                                   try {
@@ -1356,17 +1357,39 @@ const ClientProfile = () => {
                                 />
                               </div>
 
-                              {/* מעוקר/מסורס */}
+                              {/* עיקור/סירוס */}
                               <div>
-                                <label className="text-sm font-medium mb-2 block">מעוקר/מסורס:</label>
-                                <div className="flex gap-2 items-center">
-                                  <input
-                                    type="checkbox"
-                                    name={`neuter-${pet.id}`}
-                                    defaultChecked={pet.neuter_status === 'neutered'}
-                                    className="w-4 h-4"
-                                  />
-                                  <span className="text-sm">מעוקר/מסורס</span>
+                                <label className="text-sm font-medium mb-2 block">
+                                  {pet.sex === 'female' ? 'סטטוס עיקור:' : 'סטטוס סירוס:'}
+                                </label>
+                                <div className="flex gap-4 flex-row-reverse">
+                                  <label className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name={`neuter-${pet.id}`}
+                                      value={pet.sex === 'female' ? 'מעוקרת' : 'מסורס'}
+                                      defaultChecked={pet.neuter_status === 'מעוקרת' || pet.neuter_status === 'מסורס'}
+                                    />
+                                    <span>{pet.sex === 'female' ? 'מעוקרת' : 'מסורס'}</span>
+                                  </label>
+                                  <label className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name={`neuter-${pet.id}`}
+                                      value={pet.sex === 'female' ? 'לא מעוקרת' : 'לא מסורס'}
+                                      defaultChecked={pet.neuter_status === 'לא מעוקרת' || pet.neuter_status === 'לא מסורס'}
+                                    />
+                                    <span>{pet.sex === 'female' ? 'לא מעוקרת' : 'לא מסורס'}</span>
+                                  </label>
+                                  <label className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name={`neuter-${pet.id}`}
+                                      value=""
+                                      defaultChecked={!pet.neuter_status || pet.neuter_status === 'לא ידוע'}
+                                    />
+                                    <span>לא ידוע</span>
+                                  </label>
                                 </div>
                               </div>
 

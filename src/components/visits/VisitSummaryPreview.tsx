@@ -28,10 +28,7 @@ const sexLabels: Record<string, string> = {
   unknown: 'לא ידוע',
 };
 
-const neuterLabels: Record<string, string> = {
-  neutered: 'מעוקר/מסורס',
-  intact: 'לא מעוקר',
-};
+// neuterLabels removed - values are now stored in Hebrew directly in DB
 
 export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
   // Use dynamic primary color or default
@@ -116,7 +113,7 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
             {data.petBreed && <div><span className="font-semibold">גזע:</span> {data.petBreed}</div>}
             {data.petSex && <div><span className="font-semibold">מין:</span> {sexLabels[data.petSex] || data.petSex}</div>}
             {data.petNeuterStatus && data.petNeuterStatus !== 'none' && (
-              <div><span className="font-semibold">עיקור:</span> {neuterLabels[data.petNeuterStatus] || 'לא ידוע'}</div>
+              <div><span className="font-semibold">{data.petSex === 'female' ? 'עיקור:' : 'סירוס:'}</span> {data.petNeuterStatus}</div>
             )}
             {data.petWeight && <div><span className="font-semibold">משקל:</span> {data.petWeight} ק"ג</div>}
             {data.petAge && <div><span className="font-semibold">גיל:</span> {data.petAge}</div>}

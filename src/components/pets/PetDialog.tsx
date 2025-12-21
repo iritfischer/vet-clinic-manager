@@ -317,7 +317,10 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                   <Label htmlFor="sex">מין</Label>
                   <Select
                     value={watch('sex') || 'none'}
-                    onValueChange={(value) => setValue('sex', value === 'none' ? '' : value)}
+                    onValueChange={(value) => {
+                      setValue('sex', value === 'none' ? '' : value);
+                      setValue('neuter_status', ''); // איפוס סטטוס עיקור/סירוס בשינוי מין
+                    }}
                     dir="rtl"
                   >
                     <SelectTrigger className="text-right">
@@ -368,7 +371,9 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="neuter_status">סטטוס עיקור/סירוס</Label>
+                <Label htmlFor="neuter_status">
+                  {watch('sex') === 'female' ? 'סטטוס עיקור' : 'סטטוס סירוס'}
+                </Label>
                 <Select
                   value={watch('neuter_status') || 'none'}
                   onValueChange={(value) => setValue('neuter_status', value === 'none' ? '' : value)}
@@ -379,8 +384,17 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                   </SelectTrigger>
                   <SelectContent dir="rtl">
                     <SelectItem value="none" className="text-right">לא ידוע</SelectItem>
-                    <SelectItem value="neutered" className="text-right">מעוקר/מסורס</SelectItem>
-                    <SelectItem value="intact" className="text-right">לא מעוקר</SelectItem>
+                    {watch('sex') === 'female' ? (
+                      <>
+                        <SelectItem value="מעוקרת" className="text-right">מעוקרת</SelectItem>
+                        <SelectItem value="לא מעוקרת" className="text-right">לא מעוקרת</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="מסורס" className="text-right">מסורס</SelectItem>
+                        <SelectItem value="לא מסורס" className="text-right">לא מסורס</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
