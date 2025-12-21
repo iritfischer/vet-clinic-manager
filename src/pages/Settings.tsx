@@ -66,6 +66,7 @@ const Settings = () => {
   const [clinicVetLicense, setClinicVetLicense] = useState('');
   const [clinicLogo, setClinicLogo] = useState<string | null>(null);
   const [primaryColor, setPrimaryColor] = useState('#E8833A');
+  const [vetSignature, setVetSignature] = useState('');
   const [clinicLoading, setClinicLoading] = useState(false);
   const [savingClinic, setSavingClinic] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -114,6 +115,7 @@ const Settings = () => {
           setClinicWebsite(settings.website || '');
           setClinicVetLicense(settings.vetLicense || '');
           setPrimaryColor(settings.primaryColor || '#E8833A');
+          setVetSignature(settings.vetSignature || '');
         }
       } catch (error) {
         console.error('Error loading clinic settings:', error);
@@ -182,6 +184,7 @@ const Settings = () => {
             website: clinicWebsite,
             vetLicense: clinicVetLicense,
             primaryColor: primaryColor,
+            vetSignature: vetSignature,
           },
         })
         .eq('id', clinicId);
@@ -475,6 +478,19 @@ const Settings = () => {
                           value={clinicVetLicense}
                           onChange={(e) => setClinicVetLicense(e.target.value)}
                         />
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="vetSignature">חתימה לסיכום ביקור</Label>
+                        <Input
+                          id="vetSignature"
+                          placeholder="ד״ר ישראל ישראלי, וטרינר מורשה"
+                          value={vetSignature}
+                          onChange={(e) => setVetSignature(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          טקסט זה יופיע בסוף כל סיכום ביקור
+                        </p>
                       </div>
 
                       <div className="space-y-2">

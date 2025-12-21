@@ -41,6 +41,7 @@ export interface VisitSummaryData {
   clinicVetLicense?: string;
   clinicEmail?: string;
   primaryColor?: string;
+  vetSignature?: string;
 
   // Visit info
   visitDate: string;

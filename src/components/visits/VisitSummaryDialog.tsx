@@ -248,6 +248,7 @@ export const VisitSummaryDialog = ({ open, onOpenChange, visit }: VisitSummaryDi
         clinicVetLicense: clinicSettings.vetLicense || undefined,
         clinicEmail: clinic.email || undefined,
         primaryColor: clinicSettings.primaryColor || '#E8833A',
+        vetSignature: clinicSettings.vetSignature || undefined,
         visitDate: format(new Date(visit.visit_date), 'dd/MM/yyyy', { locale: he }),
         visitType: visit.visit_type,
         petName: visit.pets?.name || 'לא ידוע',

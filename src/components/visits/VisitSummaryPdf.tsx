@@ -251,6 +251,16 @@ const createStyles = (primaryColor: string) => StyleSheet.create({
   label: {
     fontWeight: 700,
   },
+  // Signature
+  signature: {
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  signatureText: {
+    fontSize: 12,
+    fontWeight: 700,
+    textAlign: 'right',
+  },
 });
 
 interface VisitSummaryPdfProps {
@@ -495,6 +505,13 @@ export const VisitSummaryPdf = ({ data }: VisitSummaryPdfProps) => {
                 <Text style={styles.totalAmount}>{data.totalAmount?.toFixed(2)} ש"ח</Text>
               </View>
             </View>
+          </View>
+        )}
+
+        {/* Signature */}
+        {data.vetSignature && (
+          <View style={styles.signature}>
+            <Text style={styles.signatureText}>{data.vetSignature}</Text>
           </View>
         )}
 

@@ -315,6 +315,13 @@ export const VisitSummaryPreview = ({ data }: VisitSummaryPreviewProps) => {
             </div>
           </div>
         )}
+
+        {/* Signature */}
+        {data.vetSignature && (
+          <div className="text-left mt-8 mb-4">
+            <p className="text-lg font-bold text-gray-800">{data.vetSignature}</p>
+          </div>
+        )}
       </div>
 
       {/* Footer */}
