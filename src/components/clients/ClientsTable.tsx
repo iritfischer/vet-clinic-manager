@@ -129,7 +129,7 @@ export const ClientsTable = ({ clients, onEdit, onDelete }: ClientsTableProps) =
           <AlertDialogHeader>
             <AlertDialogTitle className="text-right">מחיקת לקוח</AlertDialogTitle>
             <AlertDialogDescription className="text-right">
-              פעולה זו תמחק את הלקוח לצמיתות. האם אתה בטוח?
+              פעולה זו תמחק את הלקוח וכל החיות שלו לצמיתות. האם אתה בטוח?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -111,13 +111,22 @@ const Clients = () => {
 
   const handleDelete = async (id: string) => {
     try {
+      // מחיקת כל החיות של הלקוח תחילה
+      const { error: petsError } = await supabase
+        .from('pets')
+        .delete()
+        .eq('client_id', id);
+
+      if (petsError) throw petsError;
+
+      // מחיקת הלקוח
       const { error } = await supabase
         .from('clients')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
-      toast({ title: 'הלקוח נמחק בהצלחה' });
+      toast({ title: 'הלקוח והחיות שלו נמחקו בהצלחה' });
       fetchClients();
     } catch (error: any) {
       toast({
