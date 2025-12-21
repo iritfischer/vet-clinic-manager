@@ -40,6 +40,12 @@ const speciesConfig = {
   other: { label: 'אחר', color: 'bg-muted text-muted-foreground' },
 };
 
+const statusConfig = {
+  active: { label: 'פעיל', variant: 'default' as const },
+  lost: { label: 'נאבד', variant: 'destructive' as const },
+  deceased: { label: 'נפטר', variant: 'secondary' as const },
+};
+
 export const PetsTable = ({ pets, onEdit, onDelete }: PetsTableProps) => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -120,8 +126,8 @@ export const PetsTable = ({ pets, onEdit, onDelete }: PetsTableProps) => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={pet.status === 'active' ? 'default' : 'outline'}>
-                        {pet.status === 'active' ? 'פעיל' : 'לא פעיל'}
+                      <Badge variant={statusConfig[pet.status as keyof typeof statusConfig]?.variant || 'outline'}>
+                        {statusConfig[pet.status as keyof typeof statusConfig]?.label || pet.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-end">

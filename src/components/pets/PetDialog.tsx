@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { TagInput } from '@/components/shared/TagInput';
@@ -56,7 +55,7 @@ const petSchema = z.object({
   license_number: z.string().max(50).optional().or(z.literal('')),
   neuter_status: z.string().optional().or(z.literal('')),
   current_weight: z.string().optional().or(z.literal('')),
-  status: z.enum(['active', 'inactive', 'deceased']),
+  status: z.enum(['active', 'lost', 'deceased']),
 });
 
 // Helper function to calculate age from birth_date
@@ -347,13 +346,22 @@ export const PetDialog = ({ open, onClose, onSave, pet, defaultClientId }: PetDi
                 />
               </div>
 
-              <div className="flex items-center justify-between flex-row-reverse">
-                <Label htmlFor="status">סטטוס פעיל</Label>
-                <Switch
-                  id="status"
-                  checked={watch('status') === 'active'}
-                  onCheckedChange={(checked) => setValue('status', checked ? 'active' : 'inactive')}
-                />
+              <div className="space-y-2">
+                <Label htmlFor="status">סטטוס חיה</Label>
+                <Select
+                  value={watch('status')}
+                  onValueChange={(value) => setValue('status', value as 'active' | 'lost' | 'deceased')}
+                  dir="rtl"
+                >
+                  <SelectTrigger className="text-right">
+                    <SelectValue placeholder="בחר סטטוס" />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    <SelectItem value="active" className="text-right">פעיל</SelectItem>
+                    <SelectItem value="lost" className="text-right">נאבד</SelectItem>
+                    <SelectItem value="deceased" className="text-right">נפטר</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </TabsContent>
 

@@ -135,12 +135,11 @@ const ClientProfile = () => {
       if (clientError) throw clientError;
       setClient(clientData);
 
-      // Fetch pets
+      // Fetch pets (all statuses - active, lost, deceased)
       const { data: petsData, error: petsError } = await supabase
         .from('pets')
         .select('*')
         .eq('client_id', clientId as string)
-        .eq('status', 'active')
         .order('name', { ascending: true });
 
       if (petsError) throw petsError;
@@ -662,6 +661,66 @@ const ClientProfile = () => {
     }
   };
 
+  // Handle pet status change
+  const handlePetStatusChange = async (petId: string, newStatus: 'active' | 'lost' | 'deceased') => {
+    if (!clinicId) return;
+
+    // Get current status before update
+    const currentPet = pets.find(p => p.id === petId);
+    const oldStatus = currentPet?.status || 'active';
+
+    // Don't do anything if status hasn't changed
+    if (oldStatus === newStatus) return;
+
+    try {
+      // Update pet status
+      const { error: updateError } = await supabase
+        .from('pets')
+        .update({ status: newStatus })
+        .eq('id', petId)
+        .eq('clinic_id', clinicId);
+
+      if (updateError) throw updateError;
+
+      // Record status change in history
+      const { error: historyError } = await supabase
+        .from('pet_status_history')
+        .insert({
+          clinic_id: clinicId,
+          pet_id: petId,
+          old_status: oldStatus,
+          new_status: newStatus,
+        });
+
+      if (historyError) {
+        console.error('Error recording status history:', historyError);
+        // Don't fail the whole operation if history insert fails
+      }
+
+      // Update local state
+      setPets(prev => prev.map(p =>
+        p.id === petId ? { ...p, status: newStatus } : p
+      ));
+
+      const statusLabels: Record<string, string> = {
+        active: 'פעיל',
+        lost: 'נאבד',
+        deceased: 'נפטר',
+      };
+
+      toast({
+        title: 'הצלחה',
+        description: `סטטוס החיה עודכן ל${statusLabels[newStatus]}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'שגיאה',
+        description: error.message || 'שגיאה בעדכון סטטוס החיה',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Handle adding a new pet
   const handlePetSave = async (data: any) => {
     if (!clinicId) return;
@@ -1019,9 +1078,24 @@ const ClientProfile = () => {
                       {/* סטטוס */}
                       <div className="flex justify-between items-center pt-1 border-t border-orange-200">
                         <span className="text-xs text-muted-foreground">סטטוס חיה</span>
-                        <Badge className={`text-xs ${selectedPet.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`}>
-                          {selectedPet.status === 'active' ? 'פעיל' : 'לא פעיל'}
-                        </Badge>
+                        <Select
+                          value={selectedPet.status || 'active'}
+                          onValueChange={(value) => handlePetStatusChange(selectedPet.id, value as 'active' | 'lost' | 'deceased')}
+                          dir="rtl"
+                        >
+                          <SelectTrigger className={`w-24 h-7 text-xs border ${
+                            selectedPet.status === 'active' ? 'bg-green-100 text-green-800 border-green-300' :
+                            selectedPet.status === 'lost' ? 'bg-red-100 text-red-800 border-red-300' :
+                            'bg-gray-100 text-gray-800 border-gray-300'
+                          }`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent dir="rtl">
+                            <SelectItem value="active">פעיל</SelectItem>
+                            <SelectItem value="lost">נאבד</SelectItem>
+                            <SelectItem value="deceased">נפטר</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>

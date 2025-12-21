@@ -20,7 +20,8 @@ import {
   ChevronUp,
   Send,
   Edit,
-  Trash2
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -38,7 +39,7 @@ import { VisitWithRelations } from '@/lib/visitSummaryTypes';
 
 interface TimelineEvent {
   id: string;
-  type: 'visit' | 'reminder_completed';
+  type: 'visit' | 'reminder_completed' | 'status_change';
   date: string;
   title: string;
   subtitle?: string;
@@ -47,6 +48,14 @@ interface TimelineEvent {
   icon: React.ReactNode;
   color: string;
 }
+
+// תרגום סטטוסי חיה
+const petStatusLabels: Record<string, string> = {
+  active: 'פעיל',
+  lost: 'נאבד',
+  deceased: 'נפטר',
+  transferred: 'הועבר',
+};
 
 interface PetTimelineProps {
   clientId: string;
@@ -126,6 +135,14 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
         .eq('status', 'completed')
         .order('updated_at', { ascending: false });
 
+      // Fetch status history
+      const { data: statusHistory } = await supabase
+        .from('pet_status_history')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .eq('pet_id', petId)
+        .order('changed_at', { ascending: false });
+
       // Convert to timeline events
       const timelineEvents: TimelineEvent[] = [];
 
@@ -193,6 +210,30 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
           status: 'completed',
           icon: iconMap[reminder.reminder_type] || <Bell className="h-4 w-4" />,
           color: colorMap[reminder.reminder_type] || 'bg-gray-500',
+        });
+      });
+
+      // Add status changes
+      statusHistory?.forEach(change => {
+        const statusColorMap: Record<string, string> = {
+          active: 'bg-green-500',
+          lost: 'bg-red-500',
+          deceased: 'bg-gray-600',
+        };
+
+        const oldStatusLabel = petStatusLabels[change.old_status || ''] || change.old_status || 'לא ידוע';
+        const newStatusLabel = petStatusLabels[change.new_status] || change.new_status;
+
+        timelineEvents.push({
+          id: change.id,
+          type: 'status_change',
+          date: change.changed_at,
+          title: newStatusLabel,
+          subtitle: change.notes || undefined,
+          details: { ...change, oldStatusLabel, newStatusLabel },
+          status: change.new_status,
+          icon: <AlertCircle className="h-4 w-4" />,
+          color: statusColorMap[change.new_status] || 'bg-orange-500',
         });
       });
 
@@ -489,6 +530,36 @@ export const PetTimeline = ({ petId, petName, onNewVisit, onEditVisit, onExportP
                             )}
                           </div>
                         </div>
+                      )}
+                    </div>
+                  ) : event.type === 'status_change' ? (
+                    // Status change event
+                    <div className={`border rounded-lg p-4 ${
+                      event.status === 'active' ? 'bg-green-50 border-green-200' :
+                      event.status === 'lost' ? 'bg-red-50 border-red-200' :
+                      'bg-gray-50 border-gray-200'
+                    }`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-muted-foreground">שינוי סטטוס:</span>
+                        <Badge variant="outline" className="text-xs bg-white">
+                          {event.details?.oldStatusLabel}
+                        </Badge>
+                        <Badge className="text-[10px] px-1.5 py-0 bg-primary/80">
+                          ל
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${
+                          event.status === 'active' ? 'bg-green-100 text-green-800 border-green-300' :
+                          event.status === 'lost' ? 'bg-red-100 text-red-800 border-red-300' :
+                          'bg-gray-100 text-gray-800 border-gray-300'
+                        }`}>
+                          {event.details?.newStatusLabel}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {format(new Date(event.date), 'dd/MM/yyyy HH:mm', { locale: he })}
+                      </p>
+                      {event.subtitle && (
+                        <p className="text-sm text-muted-foreground mt-1">{event.subtitle}</p>
                       )}
                     </div>
                   ) : (

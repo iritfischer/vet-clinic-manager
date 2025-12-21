@@ -742,7 +742,6 @@ export const VisitForm = ({ onSave, onCancel, visit, preSelectedClientId, preSel
     if (data) setPriceItems(data);
   };
 
-
   // Handle creating new price item
   const handleCreatePriceItem = async () => {
     if (!clinicId || !newPriceItem.name || !newPriceItem.price_with_vat) {
